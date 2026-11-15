@@ -1,0 +1,182 @@
+<?php
+
+declare(strict_types=1);
+
+namespace StoreKeeper\Commerce\Customers;
+
+use StoreKeeper\Commerce\Core\Clock;
+use StoreKeeper\Commerce\Core\Database\Connection;
+
+/**
+ * Customers, groups, addresses and special prices (§8.2).
+ */
+final class CustomerRepository
+{
+    public function __construct(
+        private readonly Connection $db,
+        private readonly Clock $clock,
+    ) {
+    }
+
+    /** @return list<array<string,mixed>> */
+    public function groups(): array
+    {
+        return $this->db->select(sprintf('SELECT * FROM %scustomer_groups ORDER BY id ASC', $this->db->prefix()));
+    }
+
+    /** @return array<string,mixed>|null */
+    public function group(int $groupId): ?array
+    {
+        return $this->db->first(
+            sprintf('SELECT * FROM %scustomer_groups WHERE id = ?', $this->db->prefix()),
+            [$groupId]
+        );
+    }
+
+    /** @return array<string,mixed>|null */
+    public function defaultGroup(): ?array
+    {
+        return $this->db->first(
+            sprintf('SELECT * FROM %scustomer_groups WHERE is_default = 1 ORDER BY id ASC LIMIT 1', $this->db->prefix())
+        );
+    }
+
+    /** @return array<string,mixed>|null */
+    public function customer(int $customerId): ?array
+    {
+        return $this->db->first(
+            sprintf('SELECT * FROM %scustomers WHERE id = ?', $this->db->prefix()),
+            [$customerId]
+        );
+    }
+
+    /** @return array<string,mixed>|null */
+    public function customerByUuid(string $uuid): ?array
+    {
+        return $this->db->first(
+            sprintf('SELECT * FROM %scustomers WHERE uuid = ?', $this->db->prefix()),
+            [$uuid]
+        );
+    }
+
+    /** @return array<string,mixed>|null */
+    public function customerByPhone(string $phoneE164): ?array
+    {
+        return $this->db->first(
+            sprintf('SELECT * FROM %scustomers WHERE phone_e164 = ?', $this->db->prefix()),
+            [$phoneE164]
+        );
+    }
+
+    /** @param array<string,mixed> $data */
+    public function create(array $data): int
+    {
+        return $this->db->insert($this->db->prefix() . 'customers', $data);
+    }
+
+    /** @param array<string,mixed> $data */
+    public function update(int $customerId, array $data): void
+    {
+        $data['updated_at'] = $this->clock->nowString();
+        $this->db->update($this->db->prefix() . 'customers', $data, ['id' => $customerId]);
+    }
+
+    /**
+     * @return list<array<string,mixed>>
+     */
+    public function search(string $query, int $limit = 20): array
+    {
+        $like = '%' . $query . '%';
+
+        return $this->db->select(
+            sprintf(
+                'SELECT * FROM %scustomers WHERE name LIKE ? OR phone_e164 LIKE ? OR business_name LIKE ? ORDER BY name ASC LIMIT ?',
+                $this->db->prefix()
+            ),
+            [$like, $like, $like, $limit]
+        );
+    }
+
+    /** @param array<string,mixed> $data */
+    public function createAddress(array $data): int
+    {
+        return $this->db->insert($this->db->prefix() . 'addresses', $data);
+    }
+
+    /** @return list<array<string,mixed>> */
+    public function addresses(int $customerId): array
+    {
+        return $this->db->select(
+            sprintf('SELECT * FROM %saddresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC', $this->db->prefix()),
+            [$customerId]
+        );
+    }
+
+    /** @return array<string,mixed>|null */
+    public function address(int $addressId): ?array
+    {
+        return $this->db->first(
+            sprintf('SELECT * FROM %saddresses WHERE id = ?', $this->db->prefix()),
+            [$addressId]
+        );
+    }
+
+    public function deleteAddress(int $addressId): void
+    {
+        $this->db->delete($this->db->prefix() . 'addresses', ['id' => $addressId]);
+    }
+
+    public function clearDefaultAddress(int $customerId): void
+    {
+        $this->db->execute(
+            sprintf('UPDATE %saddresses SET is_default = 0 WHERE customer_id = ?', $this->db->prefix()),
+            [$customerId]
+        );
+    }
+
+    /** @param array<string,mixed> $data */
+    public function upsertSpecialPrice(int $customerId, int $variantId, ?int $packUnitId, array $data): int
+    {
+        $table = $this->db->prefix() . 'customer_prices';
+        $existing = $this->db->first(
+            sprintf('SELECT id FROM %s WHERE customer_id = ? AND variant_id = ? AND pack_unit_id <=> ?', $table),
+            [$customerId, $variantId, $packUnitId]
+        );
+
+        if ($existing !== null) {
+            $this->db->update($table, $data, ['id' => $existing['id']]);
+
+            return (int) $existing['id'];
+        }
+
+        return $this->db->insert($table, [
+            'customer_id' => $customerId,
+            'variant_id' => $variantId,
+            'pack_unit_id' => $packUnitId,
+            ...$data,
+        ]);
+    }
+
+    /** @return list<array<string,mixed>> */
+    public function specialPrices(int $customerId): array
+    {
+        return $this->db->select(
+            sprintf('SELECT * FROM %scustomer_prices WHERE customer_id = ? ORDER BY variant_id ASC', $this->db->prefix()),
+            [$customerId]
+        );
+    }
+
+    public function incrementTotals(int $customerId, int $orderTotalKobo, string $at): void
+    {
+        $this->db->execute(
+            sprintf(
+                'UPDATE %scustomers
+                    SET total_spent_kobo = total_spent_kobo + ?, order_count = order_count + 1,
+                        last_order_at = ?, updated_at = ?
+                  WHERE id = ?',
+                $this->db->prefix()
+            ),
+            [$orderTotalKobo, $at, $this->clock->nowString(), $customerId]
+        );
+    }
+}
