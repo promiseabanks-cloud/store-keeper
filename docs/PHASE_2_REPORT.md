@@ -59,9 +59,12 @@ check a capability, call the engine and map `StoreKeeperException` to a
 
 ## Not done / not verified
 
-- No browser was opened, so the React screen has been verified as *delivered and
-  bootstrapped*, not as visually correct or clickable. The dashboard and product
-  table were not looked at in a browser.
+- Browser check: the screen was opened in the cloud browser after signing in,
+  and both tabs render live data (dashboard counters 3 / 7 / 310 / 0 / 0 / 0;
+  product table with the three seeded products, variant counts and units). See
+  `artifacts/backend-dashboard.png` and `artifacts/backend-products.png`.
+  This also exposed a preview-only router bug where subsite asset URLs returned
+  404, which is fixed.
 - Write paths (`POST /products`, `POST /stock/receipts`) are wired but not
   exercised over HTTP; their services are covered by the engine suite.
 - No admin-side PHPUnit or REST integration tests yet.

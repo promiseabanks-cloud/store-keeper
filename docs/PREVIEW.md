@@ -25,6 +25,21 @@ code edits are live without copying files.
 Seeded demo data (`tools/preview/seed.php`): 3 products / 7 variants, 310 units
 of opening stock at *Balogun shop*, one approved wholesale customer (Ada Obi).
 
+## Opening the back office
+
+The preview panel loads pages in an iframe, and WordPress sends
+`X-Frame-Options: SAMEORIGIN` on `wp-admin` and `wp-login.php`, so the admin
+screen cannot render inside that panel. Open it in a real tab instead:
+
+1. Visit `https://<preview-host>/wp-login.php`.
+2. Sign in with the credentials above.
+3. WordPress lands on the network admin; pick **Ladies Corner → Store Keeper**,
+   or go straight to
+   `https://<preview-host>/ladies-corner/wp-admin/admin.php?page=storekeeper`.
+
+Once signed in, the whole wp-admin area works in that tab. The public front
+page still renders fine in the panel, because it does not send frame headers.
+
 ## Restarting
 
 ```bash

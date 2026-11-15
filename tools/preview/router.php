@@ -46,6 +46,34 @@ if ($target !== null) {
         return true;
     }
 
+    // A subsite path resolved to a real asset: the built-in server would look
+    // up the original (nonexistent) path, so stream the file here instead.
+    if (isset($scriptName)) {
+        $types = [
+            'js' => 'application/javascript',
+            'mjs' => 'application/javascript',
+            'css' => 'text/css',
+            'json' => 'application/json',
+            'svg' => 'image/svg+xml',
+            'png' => 'image/png',
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+            'woff' => 'font/woff',
+            'woff2' => 'font/woff2',
+            'ttf' => 'font/ttf',
+            'map' => 'application/json',
+        ];
+
+        $extension = strtolower(pathinfo($target, PATHINFO_EXTENSION));
+        header('Content-Type: ' . ($types[$extension] ?? 'application/octet-stream'));
+        header('Content-Length: ' . (string) filesize($target));
+        readfile($target);
+
+        return true;
+    }
+
     return false;
 }
 
