@@ -115,7 +115,8 @@ final class CatalogService
         foreach ($createdVariants as $variant) {
             $qty = (int) ($variant['input_qty'] ?? 0);
             if ($qty > 0 && $locationId !== null) {
-                $this->inventory->opening($variant['id'], $locationId, $qty, $actor, 'Product created');
+                // $wpdb hands back numeric columns as strings; the engine is strictly typed.
+                $this->inventory->opening((int) $variant['id'], $locationId, $qty, $actor, 'Product created');
             }
             unset($variant['input_price_kobo'], $variant['input_qty']);
             $variants[] = $this->variantWithValues($variant, $options);

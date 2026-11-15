@@ -69,6 +69,77 @@
     margin-top: 8px;
 }
 
+.sk-panel {
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+    padding: 16px 18px;
+    margin: 12px 0 20px;
+}
+
+.sk-panel h2 {
+    margin-top: 0;
+}
+
+.sk-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.sk-field {
+    margin: 0 0 12px;
+}
+
+.sk-field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #50575e;
+}
+
+.sk-field input,
+.sk-field select,
+.sk-field textarea {
+    width: 100%;
+    max-width: 420px;
+}
+
+.sk-actions {
+    margin: 8px 0 0;
+}
+
+.sk-gateway-head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.sk-gateway-head strong {
+    font-size: 15px;
+    flex: 1;
+}
+
+.sk-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.sk-help {
+    color: #50575e;
+    max-width: 720px;
+}
+
+.notice.inline {
+    margin: 12px 0 0;
+}
+
 .sk-pill {
     display: inline-block;
     padding: 2px 8px;

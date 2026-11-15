@@ -306,12 +306,22 @@ final class CatalogRepository
         $prefix = $this->db->prefix();
         $sql = sprintf(
             "SELECT p.id, p.uuid, p.name, p.status, p.visibility, p.updated_at,
-                    COUNT(DISTINCT v.id) AS variant_count,
-                    COALESCE(SUM(sl.on_hand - sl.reserved), 0) AS available
+                    (SELECT COUNT(*) FROM %svariants v WHERE v.product_id = p.id AND v.status = 'active') AS variant_count,
+                    (SELECT COALESCE(SUM(sl.on_hand - sl.reserved), 0)
+                       FROM %sstock_levels sl
+                       JOIN %svariants sv ON sv.id = sl.variant_id
+                      WHERE sv.product_id = p.id AND sv.status = 'active') AS available,
+                    (SELECT MIN(pr.amount_kobo)
+                       FROM %sprices pr
+                       JOIN %svariants pv ON pv.id = pr.variant_id
+                      WHERE pv.product_id = p.id AND pv.status = 'active' AND pr.min_qty = 1
+                        AND pr.price_list_id = (SELECT id FROM %sprice_lists WHERE is_base = 1 ORDER BY id ASC LIMIT 1)) AS price_kobo
                FROM %sproducts p
-               LEFT JOIN %svariants v ON v.product_id = p.id AND v.status = 'active'
-               LEFT JOIN %sstock_levels sl ON sl.variant_id = v.id
               WHERE p.status <> 'archived'",
+            $prefix,
+            $prefix,
+            $prefix,
+            $prefix,
             $prefix,
             $prefix,
             $prefix
@@ -325,7 +335,7 @@ final class CatalogRepository
             $params[] = $like;
         }
 
-        $sql .= ' GROUP BY p.id, p.uuid, p.name, p.status, p.visibility, p.updated_at ORDER BY p.id DESC LIMIT ?';
+        $sql .= ' ORDER BY p.id DESC LIMIT ?';
         $params[] = $limit;
 
         return array_map(static fn (array $row): array => [
@@ -336,6 +346,7 @@ final class CatalogRepository
             'visibility' => (string) $row['visibility'],
             'variant_count' => (int) $row['variant_count'],
             'available' => (int) $row['available'],
+            'price_kobo' => $row['price_kobo'] === null ? null : (int) $row['price_kobo'],
             'updated_at' => (string) $row['updated_at'],
         ], $this->db->select($sql, $params));
     }

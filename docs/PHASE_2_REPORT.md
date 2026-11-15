@@ -19,10 +19,31 @@ Registered under `/storekeeper/v1` on each site:
 | `GET /locations` | `edit_products` | active locations |
 | `GET /stock?variant_id=` | `edit_products` | online availability + recent movements |
 | `POST /stock/receipts` | `receive_stock` | delegates to `InventoryService::receive`, honours `Idempotency-Key` |
+| `GET /settings/payments` | `storekeeper_manage_settings` | gateway config with secrets masked to a last-4 hint |
+| `PUT /settings/payments` | `storekeeper_manage_settings` | saves gateway keys; secrets encrypted before storage |
 
 Controllers contain no SQL and no business rules: they validate the request,
 check a capability, call the engine and map `StoreKeeperException` to a
 `WP_Error`. Unauthenticated requests return 401, not an empty list.
+
+### Payment gateway settings
+
+- `Payments\GatewaySettings` stores OPay, Paystack and Flutterwave configuration
+  per store as one prefixed option (D-015). Public keys and flags are plain
+  text; secret keys go through `Core\Crypto` (libsodium secretbox keyed from
+  `WSP_ENCRYPTION_KEY`) and are never returned to the browser — only a `•••• 1234`
+  hint. Leaving the secret blank on save keeps the stored value.
+- The back office screen lists each gateway with enabled/test-mode switches,
+  public key, secret key and (for OPay) the merchant id.
+- `checkoutGateways()` is the only shape checkout will ever see: slug, label,
+  test mode and public key. `secretKey()` is server-side only.
+
+### Product entry
+
+- The Products tab now creates products through `POST /products`: name, retail
+  price, opening stock, location and description. Price lands in the base price
+  list, stock posts an opening ledger movement, and the table shows price,
+  variant count and available units.
 
 ### Back office shell
 

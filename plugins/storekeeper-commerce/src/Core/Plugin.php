@@ -18,6 +18,7 @@ use StoreKeeper\Commerce\Inventory\InventoryRepository;
 use StoreKeeper\Commerce\Inventory\InventoryService;
 use StoreKeeper\Commerce\Orders\OrderRepository;
 use StoreKeeper\Commerce\Orders\OrderService;
+use StoreKeeper\Commerce\Payments\GatewaySettings;
 use StoreKeeper\Commerce\Pricing\PricingRepository;
 use StoreKeeper\Commerce\Pricing\PricingService;
 use StoreKeeper\Commerce\Reports\OverviewService;
@@ -133,6 +134,10 @@ final class Plugin
 
         $container->singleton(OverviewService::class, static fn (Container $c): OverviewService => new OverviewService(
             $c->get(Connection::class)
+        ));
+
+        $container->singleton(GatewaySettings::class, static fn (Container $c): GatewaySettings => new GatewaySettings(
+            $c->get(Audit\AuditLogger::class)
         ));
 
         // The engine's shared dependencies are looked up by interface.

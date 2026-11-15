@@ -83,6 +83,10 @@ add_action('plugins_loaded', static function (): void {
         (new \StoreKeeper\Commerce\Rest\OverviewController(
             $container->get(\StoreKeeper\Commerce\Reports\OverviewService::class)
         ))->register();
+
+        (new \StoreKeeper\Commerce\Rest\SettingsController(
+            $container->get(\StoreKeeper\Commerce\Payments\GatewaySettings::class)
+        ))->register();
     });
 }, 20);
 
