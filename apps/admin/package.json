@@ -1,0 +1,10 @@
+{
+    "name": "@storekeeper/admin",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Store Keeper back office and quick order screens (React, Phase 2).",
+    "scripts": {
+        "build": "echo 'Back office build lands in Phase 2 (§22.3)'",
+        "lint": "echo 'Lint configuration lands with the back office in Phase 2'"
+    }
+}

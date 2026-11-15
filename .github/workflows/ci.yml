@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  engine:
+    name: Engine tests (PHP 8.3 + MariaDB)
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: storekeeper_test
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      SK_TEST_DSN: "mysql:host=127.0.0.1;port=3307;dbname=storekeeper_test;charset=utf8mb4"
+      SK_TEST_DB_USER: root
+      SK_TEST_DB_PASS: root
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, pdo_mysql, pcntl, json
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --no-progress
+
+      - name: Lint every PHP file
+        run: composer lint
+
+      - name: Run the engine test suite
+        run: vendor/bin/phpunit --testsuite unit,integration

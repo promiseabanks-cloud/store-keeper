@@ -1,0 +1,23 @@
+/vendor/
+/node_modules/
+**/vendor/
+**/node_modules/
+
+# Build output
+/apps/*/dist/
+/apps/*/build/
+/assets/build/
+/.phpunit.cache/
+/.phpunit.result.cache
+*.log
+
+# Local environment
+.env
+.env.local
+.dev.vars
+wp-config.php
+docker/data/
+
+# OS noise
+.DS_Store
+Thumbs.db

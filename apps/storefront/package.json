@@ -1,0 +1,10 @@
+{
+    "name": "@storekeeper/storefront",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Store Keeper storefront block assets (Interactivity API, Phase 4).",
+    "scripts": {
+        "build": "echo 'Storefront block build lands in Phase 4 (§22.5)'",
+        "lint": "echo 'Lint configuration lands with the storefront in Phase 4'"
+    }
+}

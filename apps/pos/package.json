@@ -1,0 +1,10 @@
+{
+    "name": "@storekeeper/pos",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Store Keeper offline-capable point of sale PWA (Phase 5).",
+    "scripts": {
+        "build": "echo 'POS PWA build lands in Phase 5 (§22.6)'",
+        "lint": "echo 'Lint configuration lands with the POS in Phase 5'"
+    }
+}

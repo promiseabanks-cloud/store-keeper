@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="plugins/storekeeper-commerce/tests/bootstrap.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache"
+         failOnWarning="true"
+         failOnRisky="true"
+         beStrictAboutOutputDuringTests="true">
+    <testsuites>
+        <testsuite name="unit">
+            <directory>plugins/storekeeper-commerce/tests/Unit</directory>
+        </testsuite>
+        <testsuite name="integration">
+            <directory>plugins/storekeeper-commerce/tests/Integration</directory>
+        </testsuite>
+    </testsuites>
+
+    <source>
+        <include>
+            <directory>plugins/storekeeper-commerce/src</directory>
+            <directory>plugins/storekeeper-platform/src</directory>
+        </include>
+    </source>
+
+    <php>
+        <!-- Integration tests need a real MySQL/MariaDB server; see docs/DECISIONS.md D-004. -->
+        <env name="SK_TEST_DSN" value="mysql:host=127.0.0.1;port=3307;dbname=storekeeper_test;charset=utf8mb4"/>
+        <env name="SK_TEST_DB_USER" value="root"/>
+        <env name="SK_TEST_DB_PASS" value=""/>
+    </php>
+</phpunit>
