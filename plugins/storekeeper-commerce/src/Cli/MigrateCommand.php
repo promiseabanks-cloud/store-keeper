@@ -56,6 +56,8 @@ final class MigrateCommand
 
             try {
                 $applied = $this->migrateCurrentSite();
+                // Roles and capabilities are per site in multisite (§6.4).
+                Installer::registerRoles();
                 \WP_CLI::log(sprintf('Site %d: %d store migration(s) applied.', $blogId, count($applied['store'])));
             } catch (\Throwable $error) {
                 $failures++;

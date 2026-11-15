@@ -101,7 +101,8 @@ final class CatalogService
                 $priceKobo = $variant['input_price_kobo'] ?? $productLevelPrice;
                 if ($priceKobo !== null) {
                     $listId = $this->basePriceListId();
-                    $this->prices->upsertPrice($listId, $variant['id'], null, 1, $priceKobo);
+                    // $wpdb returns numeric columns as strings; the engine is strictly typed.
+                    $this->prices->upsertPrice($listId, (int) $variant['id'], null, 1, $priceKobo);
                 }
             }
 

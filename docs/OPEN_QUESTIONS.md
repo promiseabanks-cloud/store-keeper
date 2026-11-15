@@ -4,7 +4,7 @@ Carried from §24 of the brief. Nothing here blocks Phase 1; each has a safe pla
 
 | # | Question | Current placeholder in code | Blocks |
 |---|---|---|---|
-| Q-001 | **"GoPay"** — which provider exactly (OPay, another)? | No third adapter is implemented. `Payments\GatewayAdapter` is the slot. | Phase 3 |
+| ~~Q-001~~ | ~~**"GoPay"** — which provider exactly?~~ **Answered 2026-11-15: OPay.** Treated as the third card/transfer gateway alongside Paystack and Flutterwave. | Migration `0006_payments_opay` adds `opay` to `payments.method`; the `GatewayAdapter` implementation is Phase 3 work. Merchant onboarding needs OPay merchant API credentials (public key, secret key, merchant ID) per store. | Phase 3 |
 | Q-002 | **Product name and platform domain.** Working name "Store Keeper" is used everywhere via `Core/Brand.php`. | `Brand::NAME = 'Store Keeper'` | Launch |
 | Q-003 | **Plan prices, setup fees and limits** (§17.3). | `plans.monthly_kobo`/`setup_fee_kobo` stay `TBD-OWNER`; limits are seeded as configurable JSON, no amounts invented. | Phase 6 |
 | Q-004 | **Pilot merchant(s)** and what they receive for piloting. | — | Phase 2 gate |

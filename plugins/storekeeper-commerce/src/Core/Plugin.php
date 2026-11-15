@@ -20,6 +20,7 @@ use StoreKeeper\Commerce\Orders\OrderRepository;
 use StoreKeeper\Commerce\Orders\OrderService;
 use StoreKeeper\Commerce\Pricing\PricingRepository;
 use StoreKeeper\Commerce\Pricing\PricingService;
+use StoreKeeper\Commerce\Reports\OverviewService;
 
 /**
  * Builds the engine container for the current site (§6.1, §7.3).
@@ -128,6 +129,10 @@ final class Plugin
             $c->get(Audit\AuditLogger::class),
             $c->get(Clock::class),
             (string) get_option(Brand::OPTION_PREFIX . 'order_prefix', 'SK')
+        ));
+
+        $container->singleton(OverviewService::class, static fn (Container $c): OverviewService => new OverviewService(
+            $c->get(Connection::class)
         ));
 
         // The engine's shared dependencies are looked up by interface.

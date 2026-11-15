@@ -59,6 +59,31 @@ add_action('plugins_loaded', static function (): void {
         $container->get(IdempotencyService::class),
         $container->get(AuditLogger::class)
     ))->register();
+
+    // Phase 2 screens: the back office menu and its REST endpoints.
+    \StoreKeeper\Commerce\Admin\Menu::register();
+
+    add_action('rest_api_init', static function () use ($container): void {
+        $api = new Api(
+            $container->get(IdempotencyService::class),
+            $container->get(AuditLogger::class)
+        );
+
+        (new \StoreKeeper\Commerce\Rest\CatalogController(
+            $container->get(\StoreKeeper\Commerce\Catalog\CatalogService::class),
+            $container->get(\StoreKeeper\Commerce\Catalog\CatalogRepository::class),
+            $api
+        ))->register();
+
+        (new \StoreKeeper\Commerce\Rest\InventoryController(
+            $container->get(\StoreKeeper\Commerce\Inventory\InventoryService::class),
+            $api
+        ))->register();
+
+        (new \StoreKeeper\Commerce\Rest\OverviewController(
+            $container->get(\StoreKeeper\Commerce\Reports\OverviewService::class)
+        ))->register();
+    });
 }, 20);
 
 /**
@@ -66,10 +91,9 @@ add_action('plugins_loaded', static function (): void {
  * touching the tables by hand.
  */
 if (defined('WP_CLI') && WP_CLI) {
-    \WP_CLI::add_command('storekeeper migrate', static function (): \StoreKeeper\Commerce\Cli\MigrateCommand {
-        return new \StoreKeeper\Commerce\Cli\MigrateCommand();
-    });
-    \WP_CLI::add_command('storekeeper stock', static function (): \StoreKeeper\Commerce\Cli\StockCommand {
-        return new \StoreKeeper\Commerce\Cli\StockCommand(Plugin::container()->get(\StoreKeeper\Commerce\Inventory\InventoryService::class));
-    });
+    \WP_CLI::add_command('storekeeper migrate', \StoreKeeper\Commerce\Cli\MigrateCommand::class);
+    \WP_CLI::add_command(
+        'storekeeper stock',
+        new \StoreKeeper\Commerce\Cli\StockCommand(Plugin::container()->get(\StoreKeeper\Commerce\Inventory\InventoryService::class))
+    );
 }

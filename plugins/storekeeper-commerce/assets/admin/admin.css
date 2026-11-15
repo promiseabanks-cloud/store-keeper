@@ -1,0 +1,106 @@
+/* Store Keeper back office shell (Phase 2) */
+.storekeeper-wrap #storekeeper-admin {
+    max-width: 1100px;
+}
+
+.sk-tabs {
+    display: flex;
+    gap: 4px;
+    margin: 16px 0;
+    border-bottom: 1px solid #c3c4c7;
+}
+
+.sk-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 10px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    color: #50575e;
+}
+
+.sk-tab.is-active {
+    border-bottom-color: #2271b1;
+    color: #1d2327;
+    font-weight: 600;
+}
+
+.sk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.sk-card {
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sk-stat-value {
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.1;
+    color: #1d2327;
+}
+
+.sk-stat-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #646970;
+}
+
+.sk-warning .sk-stat-value {
+    color: #996800;
+}
+
+.sk-danger .sk-stat-value {
+    color: #b32d2e;
+}
+
+.sk-table {
+    margin-top: 8px;
+}
+
+.sk-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #f0f0f1;
+    color: #3c434a;
+    font-size: 12px;
+    text-transform: capitalize;
+}
+
+.sk-pill-warning {
+    background: #fcf0d4;
+    color: #7a5800;
+}
+
+.sk-pill-danger {
+    background: #fbe5e5;
+    color: #8a1f1f;
+}
+
+.sk-empty {
+    color: #646970;
+    padding: 12px 0;
+}
+
+.sk-footnote {
+    margin-top: 28px;
+    color: #787c82;
+    font-size: 12px;
+}
+
+.storekeeper-loading {
+    color: #646970;
+    padding: 12px 0;
+}

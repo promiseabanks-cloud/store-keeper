@@ -295,6 +295,51 @@ final class CatalogRepository
         );
     }
 
+    /**
+     * Products with their active variant count and available stock, for the
+     * back office list (§11.3).
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function listWithStock(?string $search = null, int $limit = 50): array
+    {
+        $prefix = $this->db->prefix();
+        $sql = sprintf(
+            "SELECT p.id, p.uuid, p.name, p.status, p.visibility, p.updated_at,
+                    COUNT(DISTINCT v.id) AS variant_count,
+                    COALESCE(SUM(sl.on_hand - sl.reserved), 0) AS available
+               FROM %sproducts p
+               LEFT JOIN %svariants v ON v.product_id = p.id AND v.status = 'active'
+               LEFT JOIN %sstock_levels sl ON sl.variant_id = v.id
+              WHERE p.status <> 'archived'",
+            $prefix,
+            $prefix,
+            $prefix
+        );
+        $params = [];
+
+        if ($search !== null && trim($search) !== '') {
+            $sql .= ' AND (p.name LIKE ? OR p.tags LIKE ?)';
+            $like = '%' . trim($search) . '%';
+            $params[] = $like;
+            $params[] = $like;
+        }
+
+        $sql .= ' GROUP BY p.id, p.uuid, p.name, p.status, p.visibility, p.updated_at ORDER BY p.id DESC LIMIT ?';
+        $params[] = $limit;
+
+        return array_map(static fn (array $row): array => [
+            'id' => (int) $row['id'],
+            'uuid' => (string) $row['uuid'],
+            'name' => (string) $row['name'],
+            'status' => (string) $row['status'],
+            'visibility' => (string) $row['visibility'],
+            'variant_count' => (int) $row['variant_count'],
+            'available' => (int) $row['available'],
+            'updated_at' => (string) $row['updated_at'],
+        ], $this->db->select($sql, $params));
+    }
+
     /** @return list<array<string,mixed>> */
     public function productsByStatus(string $status, int $limit = 50): array
     {
