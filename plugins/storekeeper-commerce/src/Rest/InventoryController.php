@@ -25,9 +25,16 @@ final class InventoryController
         $namespace = Brand::REST_NAMESPACE;
 
         register_rest_route($namespace, '/locations', [
-            'methods' => 'GET',
-            'callback' => [$this, 'locations'],
-            'permission_callback' => Api::requireCapability(Capabilities::EDIT_PRODUCTS),
+            [
+                'methods' => 'GET',
+                'callback' => [$this, 'locations'],
+                'permission_callback' => Api::requireCapability(Capabilities::EDIT_PRODUCTS),
+            ],
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'createLocation'],
+                'permission_callback' => Api::requireCapability(Capabilities::MANAGE_SETTINGS),
+            ],
         ]);
 
         register_rest_route($namespace, '/stock', [
@@ -49,6 +56,23 @@ final class InventoryController
     public function locations(): \WP_REST_Response
     {
         return new \WP_REST_Response(['data' => $this->inventory->locations()], 200);
+    }
+
+    public function createLocation(\WP_REST_Request $request): \WP_REST_Response|\WP_Error
+    {
+        $body = $request->get_json_params();
+        if (!is_array($body)) {
+            return new \WP_Error('validation_failed', 'A JSON body is required.', ['status' => 422]);
+        }
+
+        try {
+            return new \WP_REST_Response(
+                ['data' => $this->inventory->createLocation($body, Api::staffActor($request))],
+                201
+            );
+        } catch (StoreKeeperException $error) {
+            return ErrorMapper::toWpError($error);
+        }
     }
 
     public function stock(\WP_REST_Request $request): \WP_REST_Response

@@ -371,6 +371,44 @@ final class InventoryService
     }
 
     /**
+     * A shop, store or warehouse stock can live in (§9.1).
+     *
+     * @param array<string,mixed> $input name, type, address, flags
+     * @return array<string,mixed>
+     */
+    public function createLocation(array $input, Actor $actor): array
+    {
+        $name = trim((string) ($input['name'] ?? ''));
+
+        if ($name === '') {
+            throw new ValidationFailed('A location name is required.', ['name' => 'Required.']);
+        }
+
+        $type = (string) ($input['type'] ?? 'shop');
+        if (!in_array($type, ['shop', 'warehouse', 'store', 'other'], true)) {
+            throw new ValidationFailed('Unknown location type.', ['type' => 'shop, warehouse, store or other.']);
+        }
+
+        $locationId = $this->repo->createLocation([
+            'uuid' => Uuid::v4(),
+            'name' => $name,
+            'type' => $type,
+            'sellable_online' => !empty($input['sellable_online']) ? 1 : 0,
+            'online_priority' => max(1, (int) ($input['online_priority'] ?? 1)),
+            'address' => trim((string) ($input['address'] ?? '')) ?: null,
+            'is_pickup_point' => !empty($input['is_pickup_point']) ? 1 : 0,
+            'is_active' => 1,
+            'created_at' => $this->clock->nowString(),
+        ]);
+
+        $location = $this->repo->location($locationId) ?? [];
+
+        $this->hooks->do('location/created', ['location' => $location, 'actor' => $actor->type]);
+
+        return $location;
+    }
+
+    /**
      * Release whatever is still reserved for an order's lines (§12.1 cancel).
      */
     public function releaseReservationsForOrder(int $orderId, Actor $actor, ?string $reason = 'order_cancelled'): int

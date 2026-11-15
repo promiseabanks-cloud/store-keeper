@@ -65,3 +65,24 @@ expected amount is recorded as received and raises a `payment_mismatch` alert.
 Merchants register the webhook URL shown in **Payment gateways**:
 `https://{store-domain}/wp-json/storekeeper/v1/webhooks/paystack`,
 `…/flutterwave`, `…/opay`.
+
+## Customers and prices (shipped)
+
+| Method | Path | Capability | Notes |
+|---|---|---|---|
+| GET | `/customers` | `manage_customers` | `?search=&group_id=&approval_status=&limit=`; includes group name, spend and approval state. Phones are E.164, so search `803…`, not `0803…`. |
+| POST | `/customers` | `manage_customers` | Body: `name`, `phone`, optional `business_name`, `email`, `group_id`, `notes`. |
+| GET | `/customers/{uuid}` | `manage_customers` | Customer, recent orders and special prices. |
+| POST | `/customers/{uuid}/approve` | `approve_wholesale` | Moves a pending applicant into the group they requested. |
+| POST | `/customers/{uuid}/reject` | `approve_wholesale` | Body: optional `reason`. |
+| POST | `/customers/{uuid}/group` | `approve_wholesale` | Body: `group_id`. Changing group approves the customer. |
+| PUT | `/customers/{uuid}/prices` | `edit_prices` | Body: `variant_id`, `amount_kobo`, optional `pack_unit_id`, `valid_from`, `valid_to`. |
+| GET | `/customer-groups` | `manage_customers` | Groups with their price list and approval mode. |
+| GET | `/price-lists` | `edit_prices` | Base list first. |
+| GET | `/price-lists/{id}/prices` | `edit_prices` | `?search=`; one row per tier with product and variant names. |
+| PUT | `/price-lists/{id}/prices` | `edit_prices` | Body: `variant_id`, `amount_kobo`, `min_qty` (default 1), optional `pack_unit_id`. Upserts the tier. |
+| POST | `/pricing/quote` | `edit_prices` | Body: `variant_id`, `qty`, optional `pack_unit_id`, `customer_uuid`. Returns the resolved unit price and which rule matched. |
+| POST | `/locations` | `manage_settings` | Body: `name`, `type` (`shop`, `warehouse`, `store`, `other`), optional `address`, `sellable_online`, `is_pickup_point`, `online_priority`. |
+| GET | `/staff` | `manage_staff` | Store users with role and whether they may confirm payments, plus the role list. Read-only. |
+| GET | `/alerts` | `view_reports` | `?type=`; open alerts only. |
+| POST | `/alerts/{id}/resolve` | `resolve_alerts` | Body: optional `resolution`. |

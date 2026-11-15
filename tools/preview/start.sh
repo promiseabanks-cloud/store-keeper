@@ -10,6 +10,7 @@ set -euo pipefail
 TOOLS=/tmp/wsp-tools
 PREVIEW=/tmp/wsp-preview
 PORT=3000
+HERE="$(cd "$(dirname "$0")" && pwd)"
 MYSQL=(/tmp/wsp-tools/mariadb-11.4.4-linux-systemd-x86_64/bin/mariadb
   --no-defaults --socket=/tmp/wsp-tools/mysql.sock -uroot)
 
@@ -38,7 +39,7 @@ fi
 
 if ! ss -ltn 2>/dev/null | grep -q ":$PORT "; then
   echo "Starting the preview server on 0.0.0.0:$PORT..."
-  cp "$(dirname "$0")/router.php" "$PREVIEW/router.php"
+  cp "$HERE/router.php" "$PREVIEW/router.php"
   cd "$PREVIEW"
   setsid nohup "$TOOLS/php" -S "0.0.0.0:$PORT" -t "$PREVIEW/wordpress" "$PREVIEW/router.php" \
     > "$PREVIEW/server.log" 2>&1 < /dev/null &

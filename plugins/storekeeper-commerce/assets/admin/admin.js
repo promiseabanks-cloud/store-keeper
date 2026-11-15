@@ -549,6 +549,442 @@
         );
     }
 
+    function notice(message) {
+        return message
+            ? el('div', { className: 'notice notice-' + (message.tone === 'good' ? 'success' : 'error') + ' inline' },
+                el('p', null, message.text))
+            : null;
+    }
+
+    function Customers(props) {
+        var searchState = useState('');
+        var search = searchState[0];
+        var setSearch = searchState[1];
+
+        var nameState = useState('');
+        var name = nameState[0];
+        var setName = nameState[1];
+
+        var phoneState = useState('');
+        var phone = phoneState[0];
+        var setPhone = phoneState[1];
+
+        var businessState = useState('');
+        var business = businessState[0];
+        var setBusiness = businessState[1];
+
+        var groupState = useState('');
+        var groupId = groupState[0];
+        var setGroupId = groupState[1];
+
+        var messageState = useState(null);
+        var message = messageState[0];
+        var setMessage = messageState[1];
+
+        function createCustomer(event) {
+            event.preventDefault();
+            setMessage(null);
+
+            apiFetch({
+                url: root + '/customers',
+                method: 'POST',
+                data: {
+                    name: name,
+                    phone: phone,
+                    business_name: business || null,
+                    group_id: groupId ? Number(groupId) : null
+                }
+            }).then(function (response) {
+                setMessage({ tone: 'good', text: 'Saved ' + response.data.name + '.' });
+                setName('');
+                setPhone('');
+                setBusiness('');
+                props.onChanged();
+            }).catch(function (failure) {
+                setMessage({ tone: 'bad', text: failure.message || 'Could not save the customer.' });
+            });
+        }
+
+        function decide(row, action) {
+            apiFetch({
+                url: root + '/customers/' + row.uuid + '/' + action,
+                method: 'POST',
+                data: action === 'reject' ? { reason: 'Rejected from the back office' } : {}
+            }).then(function () {
+                props.onChanged();
+            }).catch(function (failure) {
+                setMessage({ tone: 'bad', text: failure.message || 'Could not update the customer.' });
+            });
+        }
+
+        function moveTo(row, nextGroupId) {
+            apiFetch({
+                url: root + '/customers/' + row.uuid + '/group',
+                method: 'POST',
+                data: { group_id: Number(nextGroupId) }
+            }).then(function () {
+                props.onChanged();
+            }).catch(function (failure) {
+                setMessage({ tone: 'bad', text: failure.message || 'Could not change the group.' });
+            });
+        }
+
+        var shown = props.rows.filter(function (row) {
+            if (!search) { return true; }
+            var haystack = (row.name + ' ' + row.business_name + ' ' + row.phone).toLowerCase();
+            return haystack.indexOf(search.toLowerCase()) !== -1;
+        });
+
+        return el('div', null,
+            el('form', { className: 'sk-panel sk-form', onSubmit: createCustomer },
+                el('h2', null, 'New customer'),
+                el('div', { className: 'sk-form-grid' },
+                    field('Name', el('input', {
+                        type: 'text', value: name, required: true,
+                        onChange: function (event) { setName(event.target.value); }
+                    })),
+                    field('Phone', el('input', {
+                        type: 'tel', value: phone, required: true, placeholder: '08031234567',
+                        onChange: function (event) { setPhone(event.target.value); }
+                    })),
+                    field('Business name', el('input', {
+                        type: 'text', value: business,
+                        onChange: function (event) { setBusiness(event.target.value); }
+                    })),
+                    field('Group', el('select', {
+                        value: groupId,
+                        onChange: function (event) { setGroupId(event.target.value); }
+                    },
+                        el('option', { value: '' }, 'Retail (default)'),
+                        props.groups.map(function (row) {
+                            return el('option', { key: row.id, value: row.id }, row.name);
+                        })))
+                ),
+                el('p', { className: 'sk-actions' },
+                    el('button', { type: 'submit', className: 'button button-primary' }, 'Save customer')),
+                notice(message)
+            ),
+
+            el('h2', null, 'Customers'),
+            el('p', { className: 'sk-help' },
+                'Search: ',
+                el('input', {
+                    type: 'search', value: search, placeholder: 'Name or phone',
+                    onChange: function (event) { setSearch(event.target.value); }
+                })),
+            shown.length === 0
+                ? el('p', { className: 'sk-empty' }, 'No customers yet.')
+                : el('table', { className: 'widefat striped sk-table' },
+                    el('thead', null, el('tr', null,
+                        el('th', null, 'Customer'), el('th', null, 'Phone'),
+                        el('th', null, 'Group'), el('th', null, 'Spent'),
+                        el('th', null, 'Approval'), el('th', null, ''))),
+                    el('tbody', null, shown.map(function (row) {
+                        return el('tr', { key: row.uuid },
+                            el('td', null,
+                                el('strong', null, row.name),
+                                row.business_name ? el('div', { className: 'sk-help' }, row.business_name) : null),
+                            el('td', null, row.phone),
+                            el('td', null, el('select', {
+                                value: row.group_id,
+                                onChange: function (event) { moveTo(row, event.target.value); }
+                            }, props.groups.map(function (group) {
+                                return el('option', { key: group.id, value: group.id }, group.name);
+                            }))),
+                            el('td', null, money(row.total_spent_kobo)),
+                            el('td', null, el('span', {
+                                className: 'sk-pill' + (row.approval_status === 'approved' ? ' sk-pill-good' : (row.approval_status === 'pending' ? ' sk-pill-warning' : ''))
+                            }, row.approval_status)),
+                            el('td', null,
+                                row.approval_status === 'pending'
+                                    ? el('button', {
+                                        type: 'button', className: 'button button-small',
+                                        onClick: function () { decide(row, 'approve'); }
+                                    }, 'Approve')
+                                    : null,
+                                row.approval_status === 'pending'
+                                    ? el('button', {
+                                        type: 'button', className: 'button button-small sk-danger-button',
+                                        onClick: function () { decide(row, 'reject'); }
+                                    }, 'Reject')
+                                    : null)
+                        );
+                    }))
+                )
+        );
+    }
+
+    function Prices(props) {
+        var listState = useState('');
+        var listId = listState[0];
+        var setListId = listState[1];
+
+        var rowsState = useState([]);
+        var rows = rowsState[0];
+        var setRows = rowsState[1];
+
+        var variantState = useState('');
+        var variantId = variantState[0];
+        var setVariantId = variantState[1];
+
+        var qtyState = useState('1');
+        var minQty = qtyState[0];
+        var setMinQty = qtyState[1];
+
+        var amountState = useState('');
+        var amount = amountState[0];
+        var setAmount = amountState[1];
+
+        var messageState = useState(null);
+        var message = messageState[0];
+        var setMessage = messageState[1];
+
+        var base = props.lists.filter(function (row) { return Number(row.is_base) === 1; })[0] || props.lists[0];
+
+        useEffect(function () {
+            if (!listId && base) {
+                setListId(String(base.id));
+            }
+            if (!variantId && props.variants.length > 0) {
+                setVariantId(String(props.variants[0].variant_id));
+            }
+        }, [props.lists, props.variants]);
+
+        function load() {
+            if (!listId) { return; }
+            apiFetch({ url: root + '/price-lists/' + listId + '/prices?limit=500' }).then(function (response) {
+                setRows(response.data || []);
+            }).catch(function (failure) {
+                setMessage({ tone: 'bad', text: failure.message || 'Could not load prices.' });
+            });
+        }
+
+        useEffect(load, [listId]);
+
+        function savePrice(event) {
+            event.preventDefault();
+            setMessage(null);
+
+            apiFetch({
+                url: root + '/price-lists/' + listId + '/prices',
+                method: 'PUT',
+                data: {
+                    variant_id: Number(variantId),
+                    min_qty: Number(minQty || 1),
+                    amount_kobo: Math.round(Number(amount || 0) * 100)
+                }
+            }).then(function () {
+                setMessage({ tone: 'good', text: 'Price saved.' });
+                setAmount('');
+                load();
+            }).catch(function (failure) {
+                setMessage({ tone: 'bad', text: failure.message || 'Could not save the price.' });
+            });
+        }
+
+        return el('div', null,
+            el('form', { className: 'sk-panel sk-form', onSubmit: savePrice },
+                el('h2', null, 'Set a price'),
+                el('div', { className: 'sk-form-grid' },
+                    field('Price list', el('select', {
+                        value: listId,
+                        onChange: function (event) { setListId(event.target.value); }
+                    }, props.lists.map(function (row) {
+                        return el('option', { key: row.id, value: row.id }, row.name + (Number(row.is_base) === 1 ? ' (base)' : ''));
+                    }))),
+                    field('Item', el('select', {
+                        value: variantId,
+                        onChange: function (event) { setVariantId(event.target.value); }
+                    }, props.variants.map(function (row) {
+                        return el('option', { key: row.variant_id, value: row.variant_id },
+                            row.product_name + ' — ' + row.title);
+                    }))),
+                    field('From quantity', el('input', {
+                        type: 'number', min: '1', value: minQty,
+                        onChange: function (event) { setMinQty(event.target.value); }
+                    })),
+                    field('Price per piece', el('input', {
+                        type: 'number', min: '0', step: '0.01', value: amount, required: true, placeholder: '4500',
+                        onChange: function (event) { setAmount(event.target.value); }
+                    }))),
+                el('p', { className: 'sk-actions' },
+                    el('button', { type: 'submit', className: 'button button-primary' }, 'Save price')),
+                notice(message)
+            ),
+
+            el('h2', null, 'Prices'),
+            rows.length === 0
+                ? el('p', { className: 'sk-empty' }, 'No prices in this list yet.')
+                : el('table', { className: 'widefat striped sk-table' },
+                    el('thead', null, el('tr', null,
+                        el('th', null, 'Product'), el('th', null, 'Variant'),
+                        el('th', null, 'From'), el('th', null, 'Price'))),
+                    el('tbody', null, rows.map(function (row) {
+                        return el('tr', { key: row.id },
+                            el('td', null, row.product_name),
+                            el('td', null, row.variant_title),
+                            el('td', null, row.min_qty),
+                            el('td', null, money(row.amount_kobo)));
+                    }))
+                )
+        );
+    }
+
+    function Locations(props) {
+        var nameState = useState('');
+        var name = nameState[0];
+        var setName = nameState[1];
+
+        var typeState = useState('shop');
+        var type = typeState[0];
+        var setType = typeState[1];
+
+        var addressState = useState('');
+        var address = addressState[0];
+        var setAddress = addressState[1];
+
+        var onlineState = useState(true);
+        var sellableOnline = onlineState[0];
+        var setSellableOnline = onlineState[1];
+
+        var messageState = useState(null);
+        var message = messageState[0];
+        var setMessage = messageState[1];
+
+        function createLocation(event) {
+            event.preventDefault();
+            setMessage(null);
+
+            apiFetch({
+                url: root + '/locations',
+                method: 'POST',
+                data: {
+                    name: name,
+                    type: type,
+                    address: address || null,
+                    sellable_online: sellableOnline,
+                    is_pickup_point: type === 'shop'
+                }
+            }).then(function () {
+                setMessage({ tone: 'good', text: 'Location added.' });
+                setName('');
+                setAddress('');
+                props.onChanged();
+            }).catch(function (failure) {
+                setMessage({ tone: 'bad', text: failure.message || 'Could not add the location.' });
+            });
+        }
+
+        return el('div', null,
+            el('form', { className: 'sk-panel sk-form', onSubmit: createLocation },
+                el('h2', null, 'New location'),
+                el('div', { className: 'sk-form-grid' },
+                    field('Name', el('input', {
+                        type: 'text', value: name, required: true, placeholder: 'Balogun shop',
+                        onChange: function (event) { setName(event.target.value); }
+                    })),
+                    field('Type', el('select', {
+                        value: type,
+                        onChange: function (event) { setType(event.target.value); }
+                    },
+                        el('option', { value: 'shop' }, 'Shop'),
+                        el('option', { value: 'warehouse' }, 'Warehouse'),
+                        el('option', { value: 'store' }, 'Store'),
+                        el('option', { value: 'other' }, 'Other'))),
+                    field('Address', el('input', {
+                        type: 'text', value: address,
+                        onChange: function (event) { setAddress(event.target.value); }
+                    }))),
+                el('p', { className: 'sk-field' },
+                    el('label', null,
+                        el('input', {
+                            type: 'checkbox', checked: sellableOnline,
+                            onChange: function (event) { setSellableOnline(event.target.checked); }
+                        }),
+                        ' Sell stock from here online')),
+                el('p', { className: 'sk-actions' },
+                    el('button', { type: 'submit', className: 'button button-primary' }, 'Add location')),
+                notice(message)
+            ),
+
+            el('h2', null, 'Locations'),
+            el('table', { className: 'widefat striped sk-table' },
+                el('thead', null, el('tr', null,
+                    el('th', null, 'Location'), el('th', null, 'Type'),
+                    el('th', null, 'Online'), el('th', null, 'Address'))),
+                el('tbody', null, props.rows.map(function (row) {
+                    return el('tr', { key: row.id },
+                        el('td', null, el('strong', null, row.name)),
+                        el('td', null, row.type),
+                        el('td', null, el('span', {
+                            className: 'sk-pill' + (Number(row.sellable_online) === 1 ? ' sk-pill-good' : '')
+                        }, Number(row.sellable_online) === 1 ? 'yes' : 'no')),
+                        el('td', null, row.address || '—'));
+                }))
+            )
+        );
+    }
+
+    function Staff(props) {
+        var data = props.data || { staff: [], roles: [] };
+
+        return el('div', null,
+            el('h2', null, 'Staff'),
+            el('p', { className: 'sk-help' },
+                'Add or remove people on the WordPress Users screen; this list shows who can work in the store and what they may approve.'),
+            data.staff.length === 0
+                ? el('p', { className: 'sk-empty' }, 'No staff accounts yet.')
+                : el('table', { className: 'widefat striped sk-table' },
+                    el('thead', null, el('tr', null,
+                        el('th', null, 'Name'), el('th', null, 'Email'),
+                        el('th', null, 'Role'), el('th', null, 'Confirms payments'))),
+                    el('tbody', null, data.staff.map(function (row) {
+                        return el('tr', { key: row.id },
+                            el('td', null, el('strong', null, row.name)),
+                            el('td', null, row.email),
+                            el('td', null, el('span', { className: 'sk-pill' }, row.role || '—')),
+                            el('td', null, row.can_confirm_payments ? 'yes' : 'no'));
+                    }))
+                ),
+            el('h2', null, 'Roles'),
+            el('table', { className: 'widefat striped sk-table' },
+                el('tbody', null, data.roles.map(function (row) {
+                    return el('tr', { key: row.slug },
+                        el('td', null, row.label),
+                        el('td', null, el('code', null, row.wp_role)));
+                }))
+            )
+        );
+    }
+
+    function Alerts(props) {
+        if (!props.rows || props.rows.length === 0) {
+            return el('p', { className: 'sk-empty' }, 'No open alerts.');
+        }
+
+        return el('table', { className: 'widefat striped sk-table' },
+            el('thead', null, el('tr', null,
+                el('th', null, 'Alert'), el('th', null, 'Detail'),
+                el('th', null, 'When'), el('th', null, ''))),
+            el('tbody', null, props.rows.map(function (row) {
+                var detail = Object.keys(row.payload || {}).map(function (key) {
+                    return key + ': ' + row.payload[key];
+                }).join(', ');
+
+                return el('tr', { key: row.id },
+                    el('td', null, el('span', {
+                        className: 'sk-pill' + (row.severity === 'critical' ? ' sk-pill-danger' : ' sk-pill-warning')
+                    }, row.type)),
+                    el('td', null, detail),
+                    el('td', null, row.created_at),
+                    el('td', null, el('button', {
+                        type: 'button', className: 'button button-small',
+                        onClick: function () { props.onResolve(row); }
+                    }, 'Resolve')));
+            }))
+        );
+    }
+
     function App() {
         var overviewState = useState(null);
         var overview = overviewState[0];
@@ -573,6 +1009,26 @@
         var variantsState = useState([]);
         var variants = variantsState[0];
         var setVariants = variantsState[1];
+
+        var customersState = useState([]);
+        var customers = customersState[0];
+        var setCustomers = customersState[1];
+
+        var groupsState = useState([]);
+        var groups = groupsState[0];
+        var setGroups = groupsState[1];
+
+        var priceListsState = useState([]);
+        var priceLists = priceListsState[0];
+        var setPriceLists = priceListsState[1];
+
+        var staffState = useState(null);
+        var staff = staffState[0];
+        var setStaff = staffState[1];
+
+        var alertsState = useState([]);
+        var alerts = alertsState[0];
+        var setAlerts = alertsState[1];
 
         var errorState = useState(null);
         var error = errorState[0];
@@ -606,6 +1062,47 @@
             });
         }
 
+        function loadCustomers() {
+            return apiFetch({ url: root + '/customers?limit=200' }).then(function (response) {
+                setCustomers(response.data || []);
+            });
+        }
+
+        function loadGroups() {
+            return apiFetch({ url: root + '/customer-groups' }).then(function (response) {
+                setGroups(response.data || []);
+            });
+        }
+
+        function loadPriceLists() {
+            return apiFetch({ url: root + '/price-lists' }).then(function (response) {
+                setPriceLists(response.data || []);
+            });
+        }
+
+        function loadStaff() {
+            return apiFetch({ url: root + '/staff' }).then(function (response) {
+                setStaff(response.data);
+            });
+        }
+
+        function loadAlerts() {
+            return apiFetch({ url: root + '/alerts' }).then(function (response) {
+                setAlerts(response.data || []);
+            });
+        }
+
+        function resolveAlert(row) {
+            apiFetch({
+                url: root + '/alerts/' + row.id + '/resolve',
+                method: 'POST',
+                data: { resolution: 'Resolved from the back office' }
+            }).then(function () {
+                loadAlerts();
+                loadOverview();
+            }).catch(function () {});
+        }
+
         useEffect(function () {
             loadOverview().catch(function (failure) {
                 setError(failure.message || 'Could not load the overview.');
@@ -619,6 +1116,11 @@
             apiFetch({ url: root + '/settings/payments' }).then(function (response) {
                 setGateways(response.data);
             }).catch(function () {});
+            loadCustomers().catch(function () {});
+            loadGroups().catch(function () {});
+            loadPriceLists().catch(function () {});
+            loadStaff().catch(function () {});
+            loadAlerts().catch(function () {});
         }, []);
 
         if (error) {
@@ -631,7 +1133,7 @@
 
         return el('div', null,
             el('div', { className: 'sk-tabs' },
-                [['dashboard', 'Dashboard'], ['products', 'Products'], ['orders', 'Orders'], ['settings', 'Payment gateways']].map(function (pair) {
+                [['dashboard', 'Dashboard'], ['products', 'Products'], ['orders', 'Orders'], ['customers', 'Customers'], ['prices', 'Prices'], ['locations', 'Locations'], ['staff', 'Staff'], ['settings', 'Gateways']].map(function (pair) {
                     return el('button', {
                         key: pair[0],
                         type: 'button',
@@ -667,7 +1169,9 @@
                                         className: row.available <= 0 ? 'sk-pill sk-pill-danger' : 'sk-pill sk-pill-warning'
                                     }, row.available + ' / ' + row.threshold)));
                             }))
-                        )
+                        ),
+                    el('h2', null, 'Alerts'),
+                    el(Alerts, { rows: alerts, onResolve: resolveAlert })
                 )
                 : null,
 
@@ -693,6 +1197,43 @@
                 })
                 : null,
 
+            tab === 'customers'
+                ? el(Customers, {
+                    rows: customers,
+                    groups: groups,
+                    onChanged: function () {
+                        loadCustomers();
+                        loadGroups();
+                        loadOverview();
+                    }
+                })
+                : null,
+
+            tab === 'prices'
+                ? el(Prices, {
+                    lists: priceLists,
+                    variants: variants,
+                    onChanged: function () { loadPriceLists(); }
+                })
+                : null,
+
+            tab === 'locations'
+                ? el(Locations, {
+                    rows: locations,
+                    onChanged: function () {
+                        apiFetch({ url: root + '/locations' }).then(function (response) {
+                            setLocations(response.data || []);
+                        }).catch(function () {});
+                    }
+                })
+                : null,
+
+            tab === 'staff'
+                ? (staff
+                    ? el(Staff, { data: staff })
+                    : el('p', { className: 'storekeeper-loading' }, 'Loading staff…'))
+                : null,
+
             tab === 'settings'
                 ? (gateways
                     ? el(Gateways, { data: gateways, onSaved: setGateways })
@@ -700,8 +1241,8 @@
                 : null,
 
             el('p', { className: 'sk-footnote' },
-                'Store Keeper · catalogue, stock, orders and gateways in one place. ' +
-                'Orders, customers and the storefront arrive in the next phases; this screen reads live data.')
+                'Store Keeper · catalogue, stock, orders, customers, prices, payments and staff in one place. ' +
+                'The storefront and POS arrive in the next phases; this screen reads live data.')
         );
     }
 

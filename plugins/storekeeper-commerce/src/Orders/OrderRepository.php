@@ -179,6 +179,11 @@ final class OrderRepository
             }
         }
 
+        if (!empty($filters['customer_id'])) {
+            $where[] = 'o.customer_id = ?';
+            $params[] = (int) $filters['customer_id'];
+        }
+
         if (!empty($filters['search'])) {
             $where[] = '(o.number LIKE ? OR c.name LIKE ? OR c.phone_e164 LIKE ?)';
             $like = '%' . $filters['search'] . '%';

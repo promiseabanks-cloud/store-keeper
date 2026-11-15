@@ -157,6 +157,50 @@ final class PricingRepository
     }
 
     /** @return list<array<string,mixed>> */
+    /** @return list<array<string,mixed>> every price list, base first */
+    public function lists(): array
+    {
+        return $this->db->select(
+            sprintf('SELECT * FROM %sprice_lists ORDER BY is_base DESC, id ASC', $this->db->prefix())
+        );
+    }
+
+    /**
+     * The prices a list holds, flattened for the price screen.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function pricesForList(int $priceListId, string $search = '', int $limit = 200): array
+    {
+        $sql = sprintf(
+            'SELECT p.id, p.price_list_id, p.variant_id, p.pack_unit_id, p.min_qty, p.amount_kobo,
+                    v.sku, v.title AS variant_title, pr.name AS product_name, pu.name AS pack_unit_name,
+                    pu.pieces AS pack_pieces
+               FROM %sprices p
+               JOIN %svariants v ON v.id = p.variant_id
+               JOIN %sproducts pr ON pr.id = v.product_id
+               LEFT JOIN %spack_units pu ON pu.id = p.pack_unit_id
+              WHERE p.price_list_id = ?',
+            $this->db->prefix(),
+            $this->db->prefix(),
+            $this->db->prefix(),
+            $this->db->prefix()
+        );
+
+        $params = [$priceListId];
+
+        if ($search !== '') {
+            $like = '%' . $search . '%';
+            $sql .= ' AND (pr.name LIKE ? OR v.sku LIKE ?)';
+            array_push($params, $like, $like);
+        }
+
+        $sql .= ' ORDER BY pr.name ASC, v.id ASC, p.min_qty ASC LIMIT ?';
+        $params[] = $limit;
+
+        return $this->db->select($sql, $params);
+    }
+
     public function createList(string $name, string $currency, bool $isBase): int
     {
         return $this->db->insert($this->db->prefix() . 'price_lists', [

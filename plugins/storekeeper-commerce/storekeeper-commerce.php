@@ -99,6 +99,26 @@ add_action('plugins_loaded', static function (): void {
         (new \StoreKeeper\Commerce\Rest\SettingsController(
             $container->get(\StoreKeeper\Commerce\Payments\GatewaySettings::class)
         ))->register();
+
+        (new \StoreKeeper\Commerce\Rest\CustomerController(
+            $container->get(\StoreKeeper\Commerce\Customers\CustomerService::class),
+            $container->get(\StoreKeeper\Commerce\Customers\CustomerRepository::class),
+            $container->get(\StoreKeeper\Commerce\Orders\OrderRepository::class),
+            $api
+        ))->register();
+
+        (new \StoreKeeper\Commerce\Rest\PricingController(
+            $container->get(\StoreKeeper\Commerce\Pricing\PricingService::class),
+            $container->get(\StoreKeeper\Commerce\Pricing\PricingRepository::class),
+            $container->get(\StoreKeeper\Commerce\Customers\CustomerService::class),
+            $api
+        ))->register();
+
+        (new \StoreKeeper\Commerce\Rest\AlertsController(
+            $container->get(\StoreKeeper\Commerce\Alerts\AlertService::class)
+        ))->register();
+
+        (new \StoreKeeper\Commerce\Rest\StaffController())->register();
     });
 }, 20);
 

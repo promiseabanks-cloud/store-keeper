@@ -133,6 +133,7 @@ final class Plugin
             $c->get(Hooks\Hooks::class),
             $c->get(Audit\AuditLogger::class),
             $c->get(Clock::class),
+            $c->get(CustomerRepository::class),
             (string) get_option(Brand::OPTION_PREFIX . 'order_prefix', 'SK')
         ));
 

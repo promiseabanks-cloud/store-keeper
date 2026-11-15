@@ -84,6 +84,51 @@ final class CustomerRepository
     /**
      * @return list<array<string,mixed>>
      */
+    /**
+     * The staff customer list with the group each customer is priced by.
+     *
+     * @param array<string,mixed> $filters search, approval_status, group_id
+     * @return list<array<string,mixed>>
+     */
+    public function listWithGroup(array $filters = [], int $limit = 50, int $offset = 0): array
+    {
+        $where = ['1 = 1'];
+        $params = [];
+
+        if (!empty($filters['approval_status'])) {
+            $where[] = 'c.approval_status = ?';
+            $params[] = $filters['approval_status'];
+        }
+
+        if (!empty($filters['group_id'])) {
+            $where[] = 'c.group_id = ?';
+            $params[] = (int) $filters['group_id'];
+        }
+
+        if (!empty($filters['search'])) {
+            $like = '%' . $filters['search'] . '%';
+            $where[] = '(c.name LIKE ? OR c.phone_e164 LIKE ? OR c.business_name LIKE ?)';
+            array_push($params, $like, $like, $like);
+        }
+
+        $params[] = $limit;
+        $params[] = $offset;
+
+        return $this->db->select(
+            sprintf(
+                'SELECT c.*, g.name AS group_name, g.price_list_id
+                   FROM %scustomers c
+                   LEFT JOIN %scustomer_groups g ON g.id = c.group_id
+                  WHERE %s
+                  ORDER BY c.id DESC LIMIT ? OFFSET ?',
+                $this->db->prefix(),
+                $this->db->prefix(),
+                implode(' AND ', $where)
+            ),
+            $params
+        );
+    }
+
     public function search(string $query, int $limit = 20): array
     {
         $like = '%' . $query . '%';
@@ -163,6 +208,38 @@ final class CustomerRepository
         return $this->db->select(
             sprintf('SELECT * FROM %scustomer_prices WHERE customer_id = ? ORDER BY variant_id ASC', $this->db->prefix()),
             [$customerId]
+        );
+    }
+
+    /**
+     * Recompute the denormalised spend columns from the customer's orders.
+     *
+     * Recomputed rather than incremented, so a cancelled order or a corrected
+     * payment can never leave a customer's lifetime value permanently wrong.
+     */
+    public function refreshTotals(int $customerId): void
+    {
+        $this->db->execute(
+            sprintf(
+                'UPDATE %scustomers c
+                   LEFT JOIN (
+                        SELECT customer_id,
+                               COUNT(*) AS order_count,
+                               COALESCE(SUM(CASE WHEN status <> ? THEN paid_kobo ELSE 0 END), 0) AS spent_kobo,
+                               MAX(created_at) AS last_order_at
+                          FROM %sorders
+                         WHERE customer_id = ?
+                         GROUP BY customer_id
+                   ) o ON o.customer_id = c.id
+                    SET c.order_count = COALESCE(o.order_count, 0),
+                        c.total_spent_kobo = COALESCE(o.spent_kobo, 0),
+                        c.last_order_at = o.last_order_at,
+                        c.updated_at = ?
+                  WHERE c.id = ?',
+                $this->db->prefix(),
+                $this->db->prefix()
+            ),
+            ['cancelled', $customerId, $this->clock->nowString(), $customerId]
         );
     }
 

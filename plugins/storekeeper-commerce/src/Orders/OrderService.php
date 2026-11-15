@@ -14,6 +14,7 @@ use StoreKeeper\Commerce\Core\Exception\NotFound;
 use StoreKeeper\Commerce\Core\Exception\ValidationFailed;
 use StoreKeeper\Commerce\Core\Hooks\Hooks;
 use StoreKeeper\Commerce\Core\Uuid;
+use StoreKeeper\Commerce\Customers\CustomerRepository;
 use StoreKeeper\Commerce\Inventory\InventoryService;
 use StoreKeeper\Commerce\Pricing\PricingService;
 use StoreKeeper\Commerce\Pricing\PriceSource;
@@ -38,6 +39,7 @@ final class OrderService
         private readonly Hooks $hooks,
         private readonly AuditLogger $audit,
         private readonly Clock $clock,
+        private readonly CustomerRepository $customers,
         private readonly string $orderPrefix = 'SK',
     ) {
     }
@@ -263,6 +265,10 @@ final class OrderService
         $order = $this->orders->order($result['order_id']) ?? [];
         $items = $this->orders->items((int) $result['order_id']);
 
+        if ($customer !== null) {
+            $this->customers->refreshTotals((int) $customer['id']);
+        }
+
         $this->audit->log($actor, 'order.created', 'order', (int) $result['order_id'], null, [
             'number' => $order['number'] ?? null,
             'total_kobo' => $total,
@@ -484,6 +490,10 @@ final class OrderService
         ]);
 
         $updated = $this->orders->order($orderId) ?? [];
+
+        if (($updated['customer_id'] ?? null) !== null) {
+            $this->customers->refreshTotals((int) $updated['customer_id']);
+        }
 
         if ($before['payment_status'] !== $paymentStatus) {
             $this->hooks->do('order/payment_status_changed', [

@@ -109,6 +109,7 @@ final class TestStore
             $this->hooks,
             $this->audit,
             $this->clock,
+            $this->customerRepository,
             'TEST'
         );
     }
