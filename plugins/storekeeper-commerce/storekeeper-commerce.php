@@ -84,6 +84,13 @@ add_action('plugins_loaded', static function (): void {
             $container->get(\StoreKeeper\Commerce\Reports\OverviewService::class)
         ))->register();
 
+        (new \StoreKeeper\Commerce\Rest\OrderController(
+            $container->get(\StoreKeeper\Commerce\Orders\OrderService::class),
+            $container->get(\StoreKeeper\Commerce\Orders\OrderRepository::class),
+            $container->get(\StoreKeeper\Commerce\Customers\CustomerService::class),
+            $api
+        ))->register();
+
         (new \StoreKeeper\Commerce\Rest\SettingsController(
             $container->get(\StoreKeeper\Commerce\Payments\GatewaySettings::class)
         ))->register();

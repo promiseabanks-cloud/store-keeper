@@ -351,6 +351,54 @@ final class CatalogRepository
         ], $this->db->select($sql, $params));
     }
 
+    /**
+     * Flat variant list for order building: variant, product name, base price
+     * and available pieces.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function variantsForPicker(?string $search = null, int $limit = 100): array
+    {
+        $prefix = $this->db->prefix();
+        $sql = sprintf(
+            "SELECT v.id, v.sku, v.title, p.id AS product_id, p.name AS product_name,
+                    (SELECT MIN(pr.amount_kobo) FROM %sprices pr
+                      WHERE pr.variant_id = v.id AND pr.min_qty = 1
+                        AND pr.price_list_id = (SELECT id FROM %sprice_lists WHERE is_base = 1 ORDER BY id ASC LIMIT 1)) AS price_kobo,
+                    (SELECT COALESCE(SUM(sl.on_hand - sl.reserved), 0) FROM %sstock_levels sl WHERE sl.variant_id = v.id) AS available
+               FROM %svariants v
+               JOIN %sproducts p ON p.id = v.product_id
+              WHERE v.status = 'active' AND p.status = 'active'",
+            $prefix,
+            $prefix,
+            $prefix,
+            $prefix,
+            $prefix
+        );
+        $params = [];
+
+        if ($search !== null && trim($search) !== '') {
+            $sql .= ' AND (p.name LIKE ? OR v.sku LIKE ? OR v.title LIKE ?)';
+            $like = '%' . trim($search) . '%';
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+        }
+
+        $sql .= ' ORDER BY p.name ASC, v.sort_order ASC, v.id ASC LIMIT ?';
+        $params[] = $limit;
+
+        return array_map(static fn (array $row): array => [
+            'variant_id' => (int) $row['id'],
+            'sku' => (string) $row['sku'],
+            'title' => (string) $row['title'],
+            'product_id' => (int) $row['product_id'],
+            'product_name' => (string) $row['product_name'],
+            'price_kobo' => $row['price_kobo'] === null ? null : (int) $row['price_kobo'],
+            'available' => (int) $row['available'],
+        ], $this->db->select($sql, $params));
+    }
+
     /** @return list<array<string,mixed>> */
     public function productsByStatus(string $status, int $limit = 50): array
     {

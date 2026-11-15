@@ -78,6 +78,21 @@ check a capability, call the engine and map `StoreKeeperException` to a
   - `wp-admin/admin.php?page=storekeeper` returned 200 with the app root, the
     localised nonce and both assets (`admin.js`, `admin.css`) served 200.
 
+### Orders
+
+- `GET /orders` (customer name + phone joined), `POST /orders`, `GET /orders/{uuid}`,
+  `POST /orders/{uuid}/payments`, `POST /orders/{uuid}/cancel`.
+- `POST /orders` resolves the customer by phone (creating one if new), lets the
+  engine pick and reserve stock, and honours `Idempotency-Key`.
+- `OrderService::recordPayment()` records a manual payment and recomputes the
+  order's payment status; partial payments are tracked and overpayment is
+  rejected. Payment never moves stock — handing over does.
+- The Orders tab creates an order (customer, item, quantity, payment method) and
+  lists orders with totals, payment badge, **Mark paid** and **Cancel** actions.
+- Fixed a real bug on this path: reservations used the order's default location
+  even when that location held no stock, instead of the location that does
+  (D-005). Covered by `OrderPaymentTest::testAnOrderReservesFromTheLocationThatHoldsTheStock`.
+
 ## Not done / not verified
 
 - Browser check: the screen was opened in the cloud browser after signing in,
@@ -86,8 +101,9 @@ check a capability, call the engine and map `StoreKeeperException` to a
   `artifacts/backend-dashboard.png` and `artifacts/backend-products.png`.
   This also exposed a preview-only router bug where subsite asset URLs returned
   404, which is fixed.
-- Write paths (`POST /products`, `POST /stock/receipts`) are wired but not
-  exercised over HTTP; their services are covered by the engine suite.
+- Write paths are exercised over HTTP: product creation, order creation,
+  taking a payment and gateway settings were all run against the live preview.
+  `POST /stock/receipts` is wired but not exercised over HTTP yet.
 - No admin-side PHPUnit or REST integration tests yet.
 - Screens not started: product editor, variant grid UI, price lists, locations
   management, orders, payments, customers, reports, settings, POS, storefront.

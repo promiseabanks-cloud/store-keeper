@@ -193,6 +193,190 @@
         );
     }
 
+    function Orders(props) {
+        var customerState = useState('');
+        var customer = customerState[0];
+        var setCustomer = customerState[1];
+
+        var phoneState = useState('');
+        var phone = phoneState[0];
+        var setPhone = phoneState[1];
+
+        var variantState = useState('');
+        var variantId = variantState[0];
+        var setVariantId = variantState[1];
+
+        var qtyState = useState('1');
+        var qty = qtyState[0];
+        var setQty = qtyState[1];
+
+        var methodState = useState('cash');
+        var method = methodState[0];
+        var setMethod = methodState[1];
+
+        var busyState = useState(false);
+        var busy = busyState[0];
+        var setBusy = busyState[1];
+
+        var messageState = useState(null);
+        var message = messageState[0];
+        var setMessage = messageState[1];
+
+        useEffect(function () {
+            if (!variantId && props.variants.length > 0) {
+                setVariantId(String(props.variants[0].variant_id));
+            }
+        }, [props.variants]);
+
+        function createOrder(event) {
+            event.preventDefault();
+            setBusy(true);
+            setMessage(null);
+
+            apiFetch({
+                url: root + '/orders',
+                method: 'POST',
+                headers: { 'Idempotency-Key': idempotencyKey() },
+                data: {
+                    channel: 'counter',
+                    payment_method: method,
+                    customer: { name: customer || 'Walk-in customer', phone: phone },
+                    lines: [{ variant_id: Number(variantId), qty: Number(qty || 1) }],
+                    handed_over_now: method === 'cash' || method === 'pos_terminal'
+                }
+            }).then(function (response) {
+                setMessage({
+                    tone: 'good',
+                    text: 'Order ' + response.data.order.number + ' created for ' +
+                        money(response.data.order.total_kobo) + '.'
+                });
+                setCustomer('');
+                setPhone('');
+                setQty('1');
+                props.onChanged();
+            }).catch(function (failure) {
+                setMessage({ tone: 'bad', text: failure.message || 'Could not create the order.' });
+            }).then(function () {
+                setBusy(false);
+            });
+        }
+
+        function markPaid(row) {
+            apiFetch({
+                url: root + '/orders/' + row.uuid + '/payments',
+                method: 'POST',
+                data: { method: 'bank_transfer' }
+            }).then(function () {
+                props.onChanged();
+            }).catch(function (failure) {
+                setMessage({ tone: 'bad', text: failure.message || 'Could not record the payment.' });
+            });
+        }
+
+        function cancel(row) {
+            apiFetch({
+                url: root + '/orders/' + row.uuid + '/cancel',
+                method: 'POST',
+                data: { reason: 'Cancelled from the back office' }
+            }).then(function () {
+                props.onChanged();
+            }).catch(function (failure) {
+                setMessage({ tone: 'bad', text: failure.message || 'Could not cancel the order.' });
+            });
+        }
+
+        return el('div', null,
+            el('form', { className: 'sk-panel sk-form', onSubmit: createOrder },
+                el('h2', null, 'New order'),
+                el('div', { className: 'sk-form-grid' },
+                    field('Customer name', el('input', {
+                        type: 'text',
+                        value: customer,
+                        placeholder: 'Ada Obi',
+                        onChange: function (event) { setCustomer(event.target.value); }
+                    })),
+                    field('Phone', el('input', {
+                        type: 'tel',
+                        value: phone,
+                        placeholder: '08031234567',
+                        onChange: function (event) { setPhone(event.target.value); }
+                    })),
+                    field('Item', el('select', {
+                        value: variantId,
+                        onChange: function (event) { setVariantId(event.target.value); }
+                    }, props.variants.map(function (row) {
+                        return el('option', { key: row.variant_id, value: row.variant_id },
+                            row.product_name + ' — ' + row.title + ' (' + money(row.price_kobo) + ')');
+                    }))),
+                    field('Quantity', el('input', {
+                        type: 'number',
+                        min: '1',
+                        value: qty,
+                        onChange: function (event) { setQty(event.target.value); }
+                    })),
+                    field('Payment', el('select', {
+                        value: method,
+                        onChange: function (event) { setMethod(event.target.value); }
+                    },
+                        el('option', { value: 'cash' }, 'Cash'),
+                        el('option', { value: 'bank_transfer' }, 'Bank transfer'),
+                        el('option', { value: 'pos_terminal' }, 'POS terminal'),
+                        el('option', { value: 'pay_on_delivery' }, 'Pay on delivery'),
+                        el('option', { value: 'opay' }, 'OPay'),
+                        el('option', { value: 'paystack' }, 'Paystack'),
+                        el('option', { value: 'flutterwave' }, 'Flutterwave')
+                    ))
+                ),
+                el('p', { className: 'sk-help' },
+                    'Cash and POS terminal orders are handed over immediately. Other methods reserve the stock and wait for payment.'),
+                el('p', { className: 'sk-actions' },
+                    el('button', { type: 'submit', className: 'button button-primary', disabled: busy },
+                        busy ? 'Creating…' : 'Create order')
+                ),
+                message ? el('div', { className: 'notice notice-' + (message.tone === 'good' ? 'success' : 'error') + ' inline' },
+                    el('p', null, message.text)) : null
+            ),
+
+            el('h2', null, 'Orders'),
+            props.rows.length === 0
+                ? el('p', { className: 'sk-empty' }, 'No orders yet.')
+                : el('table', { className: 'widefat striped sk-table' },
+                    el('thead', null, el('tr', null,
+                        el('th', null, 'Order'), el('th', null, 'Customer'),
+                        el('th', null, 'Total'), el('th', null, 'Paid'),
+                        el('th', null, 'Status'), el('th', null, 'Payment'), el('th', null, ''))),
+                    el('tbody', null, props.rows.map(function (row) {
+                        return el('tr', { key: row.uuid },
+                            el('td', null, el('strong', null, row.number)),
+                            el('td', null, row.customer_name || '—'),
+                            el('td', null, money(row.total_kobo)),
+                            el('td', null, money(row.paid_kobo)),
+                            el('td', null, el('span', { className: 'sk-pill' }, row.status)),
+                            el('td', null, el('span', {
+                                className: 'sk-pill' + (row.payment_status === 'paid' ? ' sk-pill-good' : (row.payment_status.indexOf('partial') === 0 ? ' sk-pill-warning' : ''))
+                            }, row.payment_status)),
+                            el('td', null,
+                                row.status !== 'cancelled' && row.payment_status !== 'paid'
+                                    ? el('button', {
+                                        type: 'button',
+                                        className: 'button button-small',
+                                        onClick: function () { markPaid(row); }
+                                    }, 'Mark paid')
+                                    : null,
+                                row.status !== 'cancelled'
+                                    ? el('button', {
+                                        type: 'button',
+                                        className: 'button button-small sk-danger-button',
+                                        onClick: function () { cancel(row); }
+                                    }, 'Cancel')
+                                    : null
+                            )
+                        );
+                    }))
+                )
+        );
+    }
+
     function Gateways(props) {
         var draftState = useState({});
         var draft = draftState[0];
@@ -333,6 +517,14 @@
         var gateways = gatewaysState[0];
         var setGateways = gatewaysState[1];
 
+        var ordersState = useState([]);
+        var orders = ordersState[0];
+        var setOrders = ordersState[1];
+
+        var variantsState = useState([]);
+        var variants = variantsState[0];
+        var setVariants = variantsState[1];
+
         var errorState = useState(null);
         var error = errorState[0];
         var setError = errorState[1];
@@ -353,11 +545,25 @@
             });
         }
 
+        function loadOrders() {
+            return apiFetch({ url: root + '/orders?limit=50' }).then(function (response) {
+                setOrders(response.data || []);
+            });
+        }
+
+        function loadVariants() {
+            return apiFetch({ url: root + '/variants?limit=200' }).then(function (response) {
+                setVariants(response.data || []);
+            });
+        }
+
         useEffect(function () {
             loadOverview().catch(function (failure) {
                 setError(failure.message || 'Could not load the overview.');
             });
             loadProducts().catch(function () {});
+            loadOrders().catch(function () {});
+            loadVariants().catch(function () {});
             apiFetch({ url: root + '/locations' }).then(function (response) {
                 setLocations(response.data || []);
             }).catch(function () {});
@@ -376,7 +582,7 @@
 
         return el('div', null,
             el('div', { className: 'sk-tabs' },
-                [['dashboard', 'Dashboard'], ['products', 'Products'], ['settings', 'Payment gateways']].map(function (pair) {
+                [['dashboard', 'Dashboard'], ['products', 'Products'], ['orders', 'Orders'], ['settings', 'Payment gateways']].map(function (pair) {
                     return el('button', {
                         key: pair[0],
                         type: 'button',
@@ -421,6 +627,19 @@
                     rows: products,
                     locations: locations,
                     onCreated: function () { loadProducts(); loadOverview(); }
+                })
+                : null,
+
+            tab === 'orders'
+                ? el(Orders, {
+                    rows: orders,
+                    variants: variants,
+                    onChanged: function () {
+                        loadOrders();
+                        loadVariants();
+                        loadOverview();
+                        loadProducts();
+                    }
                 })
                 : null,
 

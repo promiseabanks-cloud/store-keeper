@@ -44,6 +44,16 @@ final class CatalogController
             ],
         ]);
 
+        register_rest_route($namespace, '/variants', [
+            'methods' => 'GET',
+            'callback' => [$this, 'variants'],
+            'permission_callback' => Api::requireCapability(Capabilities::CREATE_ORDERS),
+            'args' => [
+                'search' => ['type' => 'string', 'required' => false],
+                'limit' => ['type' => 'integer', 'required' => false, 'default' => 100],
+            ],
+        ]);
+
         register_rest_route($namespace, '/products/(?P<uuid>[0-9a-fA-F-]{36})', [
             [
                 'methods' => 'GET',
@@ -51,6 +61,16 @@ final class CatalogController
                 'permission_callback' => Api::requireCapability(Capabilities::EDIT_PRODUCTS),
             ],
         ]);
+    }
+
+    public function variants(\WP_REST_Request $request): \WP_REST_Response
+    {
+        return new \WP_REST_Response([
+            'data' => $this->repository->variantsForPicker(
+                $request->get_param('search'),
+                min(200, max(1, (int) ($request->get_param('limit') ?: 100)))
+            ),
+        ], 200);
     }
 
     public function index(\WP_REST_Request $request): \WP_REST_Response

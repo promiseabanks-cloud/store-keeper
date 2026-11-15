@@ -186,9 +186,9 @@ final class OrderService
             $itemIds = [];
 
             foreach ($preparedLines as $line) {
-                $lineLocationId = $handedOver
-                    ? ($line['location_id'] ?? $locationId)
-                    : $locationId;
+                // Reserve from the location that actually holds the stock (D-005);
+                // the order-level location only supplies the default.
+                $lineLocationId = $line['location_id'] ?? $locationId;
 
                 $itemId = $this->orders->createItem([
                     'order_id' => $orderId,
@@ -348,6 +348,79 @@ final class OrderService
 
         $this->audit->log($actor, 'order.handed_over', 'order', $orderId);
         $this->hooks->do('order/handed_over', ['order' => $updated]);
+
+        return $updated;
+    }
+
+    /**
+     * Record a manual payment against an order (bank transfer, cash, POS
+     * terminal) and recompute the order's payment status (§12.2).
+     *
+     * @param array<string,mixed> $data method, amount_kobo, reference, note
+     * @return array<string,mixed>
+     */
+    public function recordPayment(int $orderId, array $data, Actor $actor): array
+    {
+        $order = $this->orders->order($orderId);
+        if ($order === null) {
+            throw new NotFound('order', $orderId);
+        }
+
+        if ($order['status'] === OrderStatus::CANCELLED) {
+            throw new ValidationFailed('Cancelled orders cannot take payments.', ['order' => 'Cancelled.']);
+        }
+
+        $amount = (int) ($data['amount_kobo'] ?? 0);
+        $outstanding = max(0, (int) $order['total_kobo'] - (int) $order['paid_kobo']);
+
+        if ($amount <= 0) {
+            $amount = $outstanding;
+        }
+
+        if ($amount <= 0) {
+            throw new ValidationFailed('There is nothing left to pay on this order.');
+        }
+
+        if ($amount > $outstanding) {
+            throw new ValidationFailed('The payment is larger than the outstanding balance.', [
+                'amount_kobo' => 'Outstanding is ' . $outstanding . ' kobo.',
+            ]);
+        }
+
+        $method = (string) ($data['method'] ?? 'bank_transfer');
+        if (!in_array($method, ['bank_transfer', 'virtual_account', 'cash', 'pos_terminal', 'paystack', 'flutterpay', 'opay', 'flutterwave', 'pay_on_delivery', 'gateway3'], true)) {
+            throw new ValidationFailed('Unknown payment method.', ['method' => 'Unsupported.']);
+        }
+
+        $now = $this->clock->nowString();
+
+        $this->db->transaction(function () use ($orderId, $amount, $method, $data, $actor, $now): void {
+            $this->db->insert($this->db->prefix() . 'payments', [
+                'uuid' => Uuid::v4(),
+                'order_id' => $orderId,
+                'method' => $method,
+                'status' => 'succeeded',
+                'amount_kobo' => $amount,
+                'gateway_reference' => $data['reference'] ?? null,
+                'gateway_fee_kobo' => null,
+                'gateway_payload' => null,
+                'proof_attachment_id' => null,
+                'sender_name' => $data['note'] ?? null,
+                'confirmed_by' => $actor->id,
+                'confirmed_at' => $now,
+                'idempotency_key' => substr('pay-' . $orderId . '-' . bin2hex(random_bytes(8)), 0, 64),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        });
+
+        $updated = $this->refreshStatuses($orderId, $actor);
+
+        $this->audit->log($actor, 'order.payment_recorded', 'order', $orderId, null, [
+            'amount_kobo' => $amount,
+            'method' => $method,
+        ]);
+        $this->hooks->do('order/payment_recorded', ['order' => $updated, 'amount_kobo' => $amount, 'method' => $method]);
 
         return $updated;
     }

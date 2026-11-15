@@ -162,6 +162,52 @@ final class OrderRepository
     }
 
     /**
+     * Orders with the customer name attached, for the back office list.
+     *
+     * @param array<string,mixed> $filters
+     * @return list<array<string,mixed>>
+     */
+    public function listDetailed(array $filters = [], int $limit = 50, int $offset = 0): array
+    {
+        $where = ['1 = 1'];
+        $params = [];
+
+        foreach (['status', 'payment_status', 'fulfilment_status', 'channel'] as $field) {
+            if (!empty($filters[$field])) {
+                $where[] = 'o.' . $field . ' = ?';
+                $params[] = $filters[$field];
+            }
+        }
+
+        if (!empty($filters['search'])) {
+            $where[] = '(o.number LIKE ? OR c.name LIKE ? OR c.phone_e164 LIKE ?)';
+            $like = '%' . $filters['search'] . '%';
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+        }
+
+        $params[] = $limit;
+        $params[] = $offset;
+
+        $rows = $this->db->select(
+            sprintf(
+                'SELECT o.*, c.name AS customer_name, c.phone_e164 AS customer_phone
+                   FROM %sorders o
+                   LEFT JOIN %scustomers c ON c.id = o.customer_id
+                  WHERE %s
+                  ORDER BY o.id DESC LIMIT ? OFFSET ?',
+                $this->db->prefix(),
+                $this->db->prefix(),
+                implode(' AND ', $where)
+            ),
+            $params
+        );
+
+        return $rows;
+    }
+
+    /**
      * Orders list with filters (§11.8), newest first.
      *
      * @param array<string,mixed> $filters

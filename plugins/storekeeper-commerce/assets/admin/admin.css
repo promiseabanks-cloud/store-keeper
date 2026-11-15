@@ -155,6 +155,16 @@
     color: #7a5800;
 }
 
+.sk-pill-good {
+    background: #d9f0e0;
+    color: #1a6b3a;
+}
+
+.sk-danger-button {
+    color: #b32d2e;
+    margin-left: 6px;
+}
+
 .sk-pill-danger {
     background: #fbe5e5;
     color: #8a1f1f;
