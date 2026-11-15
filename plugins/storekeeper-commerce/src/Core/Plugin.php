@@ -18,7 +18,11 @@ use StoreKeeper\Commerce\Inventory\InventoryRepository;
 use StoreKeeper\Commerce\Inventory\InventoryService;
 use StoreKeeper\Commerce\Orders\OrderRepository;
 use StoreKeeper\Commerce\Orders\OrderService;
+use StoreKeeper\Commerce\Payments\Gateway\GatewayRegistry;
+use StoreKeeper\Commerce\Payments\Gateway\WordPressHttpClient;
 use StoreKeeper\Commerce\Payments\GatewaySettings;
+use StoreKeeper\Commerce\Payments\PaymentRepository;
+use StoreKeeper\Commerce\Payments\PaymentService;
 use StoreKeeper\Commerce\Pricing\PricingRepository;
 use StoreKeeper\Commerce\Pricing\PricingService;
 use StoreKeeper\Commerce\Reports\OverviewService;
@@ -138,6 +142,26 @@ final class Plugin
 
         $container->singleton(GatewaySettings::class, static fn (Container $c): GatewaySettings => new GatewaySettings(
             $c->get(Audit\AuditLogger::class)
+        ));
+
+        $container->singleton(PaymentRepository::class, static fn (Container $c): PaymentRepository => new PaymentRepository(
+            $c->get(Connection::class),
+            $c->get(Clock::class)
+        ));
+        $container->singleton(GatewayRegistry::class, static fn (Container $c): GatewayRegistry => new GatewayRegistry(
+            $c->get(GatewaySettings::class),
+            new WordPressHttpClient()
+        ));
+        $container->singleton(PaymentService::class, static fn (Container $c): PaymentService => new PaymentService(
+            $c->get(Connection::class),
+            $c->get(PaymentRepository::class),
+            $c->get(OrderService::class),
+            $c->get(GatewayRegistry::class),
+            $c->get(AlertService::class),
+            $c->get(Audit\AuditLogger::class),
+            $c->get(Clock::class),
+            rest_url(Brand::REST_NAMESPACE . '/webhooks'),
+            untrailingslashit(home_url('/'))
         ));
 
         // The engine's shared dependencies are looked up by interface.

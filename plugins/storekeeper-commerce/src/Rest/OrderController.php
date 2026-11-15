@@ -12,6 +12,7 @@ use StoreKeeper\Commerce\Core\Uuid;
 use StoreKeeper\Commerce\Customers\CustomerService;
 use StoreKeeper\Commerce\Orders\OrderRepository;
 use StoreKeeper\Commerce\Orders\OrderService;
+use StoreKeeper\Commerce\Payments\PaymentService;
 
 /**
  * Order endpoints (§11.2, §12): list, create, read, take payment and cancel.
@@ -22,6 +23,7 @@ final class OrderController
         private readonly OrderService $orders,
         private readonly OrderRepository $repository,
         private readonly CustomerService $customers,
+        private readonly PaymentService $payments,
         private readonly Api $api,
     ) {
     }
@@ -55,6 +57,12 @@ final class OrderController
             'methods' => 'POST',
             'callback' => [$this, 'pay'],
             'permission_callback' => Api::requireCapability(Capabilities::CONFIRM_PAYMENTS),
+        ]);
+
+        register_rest_route($namespace, '/orders/(?P<uuid>[0-9a-fA-F-]{36})/payment-link', [
+            'methods' => 'POST',
+            'callback' => [$this, 'paymentLink'],
+            'permission_callback' => Api::requireCapability(Capabilities::CREATE_ORDERS),
         ]);
 
         register_rest_route($namespace, '/orders/(?P<uuid>[0-9a-fA-F-]{36})/cancel', [
@@ -168,6 +176,33 @@ final class OrderController
             $updated = $this->orders->recordPayment((int) $order['id'], $body, $actor);
 
             return new \WP_REST_Response(['data' => $updated], 200);
+        } catch (StoreKeeperException $error) {
+            return ErrorMapper::toWpError($error);
+        }
+    }
+
+    /**
+     * A hosted checkout link for the order's outstanding balance (§13.2).
+     * The gateway reference is created here, so the later webhook can find
+     * the order even if the customer never comes back to the site.
+     */
+    public function paymentLink(\WP_REST_Request $request): \WP_REST_Response|\WP_Error
+    {
+        $body = $request->get_json_params();
+        $gateway = is_array($body) ? (string) ($body['gateway'] ?? '') : '';
+
+        if ($gateway === '') {
+            return new \WP_Error('validation_failed', 'gateway is required.', ['status' => 422]);
+        }
+
+        try {
+            return new \WP_REST_Response([
+                'data' => $this->payments->initialize(
+                    (string) $request['uuid'],
+                    $gateway,
+                    Api::staffActor($request)
+                ),
+            ], 201);
         } catch (StoreKeeperException $error) {
             return ErrorMapper::toWpError($error);
         }

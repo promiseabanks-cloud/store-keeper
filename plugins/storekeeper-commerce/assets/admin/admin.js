@@ -214,6 +214,10 @@
         var method = methodState[0];
         var setMethod = methodState[1];
 
+        var gatewayState = useState('');
+        var gateway = gatewayState[0];
+        var setGateway = gatewayState[1];
+
         var busyState = useState(false);
         var busy = busyState[0];
         var setBusy = busyState[1];
@@ -222,11 +226,22 @@
         var message = messageState[0];
         var setMessage = messageState[1];
 
+        var gatewayData = (props.gateways || {}).gateways || [];
+        var availableGateways = gatewayData.filter(function (row) {
+            return row.enabled && row.has_secret_key;
+        });
+
         useEffect(function () {
             if (!variantId && props.variants.length > 0) {
                 setVariantId(String(props.variants[0].variant_id));
             }
         }, [props.variants]);
+
+        useEffect(function () {
+            if (!gateway && availableGateways.length > 0) {
+                setGateway(availableGateways[0].slug);
+            }
+        }, [props.gateways]);
 
         function createOrder(event) {
             event.preventDefault();
@@ -270,6 +285,22 @@
                 props.onChanged();
             }).catch(function (failure) {
                 setMessage({ tone: 'bad', text: failure.message || 'Could not record the payment.' });
+            });
+        }
+
+        function paymentLink(row) {
+            apiFetch({
+                url: root + '/orders/' + row.uuid + '/payment-link',
+                method: 'POST',
+                data: { gateway: gateway || (availableGateways[0] || {}).slug }
+            }).then(function (response) {
+                setMessage({
+                    tone: 'good',
+                    text: 'Payment link for ' + row.number + ' (' + money(response.data.amount_kobo) + '): ',
+                    link: response.data.redirect_url
+                });
+            }).catch(function (failure) {
+                setMessage({ tone: 'bad', text: failure.message || 'Could not create a payment link.' });
             });
         }
 
@@ -334,10 +365,21 @@
                         busy ? 'Creating…' : 'Create order')
                 ),
                 message ? el('div', { className: 'notice notice-' + (message.tone === 'good' ? 'success' : 'error') + ' inline' },
-                    el('p', null, message.text)) : null
+                    el('p', null, message.text,
+                        message.link ? el('a', { href: message.link, target: '_blank', rel: 'noreferrer' }, 'Open checkout') : null)) : null
             ),
 
             el('h2', null, 'Orders'),
+            availableGateways.length > 0
+                ? el('p', { className: 'sk-help' },
+                    'Send a customer a checkout link: ',
+                    el('select', {
+                        value: gateway,
+                        onChange: function (event) { setGateway(event.target.value); }
+                    }, availableGateways.map(function (row) {
+                        return el('option', { key: row.slug, value: row.slug }, row.label + (row.test_mode ? ' (test mode)' : ''));
+                    })))
+                : el('p', { className: 'sk-help' }, 'Enable a payment gateway to send customers checkout links.'),
             props.rows.length === 0
                 ? el('p', { className: 'sk-empty' }, 'No orders yet.')
                 : el('table', { className: 'widefat striped sk-table' },
@@ -362,6 +404,13 @@
                                         className: 'button button-small',
                                         onClick: function () { markPaid(row); }
                                     }, 'Mark paid')
+                                    : null,
+                                row.status !== 'cancelled' && row.payment_status !== 'paid' && availableGateways.length > 0
+                                    ? el('button', {
+                                        type: 'button',
+                                        className: 'button button-small',
+                                        onClick: function () { paymentLink(row); }
+                                    }, 'Payment link')
                                     : null,
                                 row.status !== 'cancelled'
                                     ? el('button', {
@@ -634,6 +683,7 @@
                 ? el(Orders, {
                     rows: orders,
                     variants: variants,
+                    gateways: gateways,
                     onChanged: function () {
                         loadOrders();
                         loadVariants();

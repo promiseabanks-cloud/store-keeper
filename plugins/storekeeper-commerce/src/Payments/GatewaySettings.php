@@ -8,6 +8,8 @@ use StoreKeeper\Commerce\Core\Audit\Actor;
 use StoreKeeper\Commerce\Core\Audit\AuditLogger;
 use StoreKeeper\Commerce\Core\Brand;
 use StoreKeeper\Commerce\Core\Crypto;
+use StoreKeeper\Commerce\Payments\Gateway\GatewayConfig;
+use StoreKeeper\Commerce\Payments\Gateway\GatewayConfigProvider;
 
 /**
  * Per-store payment gateway configuration (§10.4, §19.4).
@@ -16,7 +18,7 @@ use StoreKeeper\Commerce\Core\Crypto;
  * store holds its own keys. Secret keys are encrypted before they touch the
  * options table and are never returned to the browser.
  */
-final class GatewaySettings
+final class GatewaySettings implements GatewayConfigProvider
 {
     public const OPTION = Brand::OPTION_PREFIX . 'payment_gateways';
 
@@ -138,6 +140,30 @@ final class GatewaySettings
         }
 
         return $out;
+    }
+
+    /**
+     * One gateway's settings with the secret decrypted, for the adapters.
+     * Null when the slug is not a gateway this build knows.
+     */
+    public function config(string $slug): ?GatewayConfig
+    {
+        if (!isset(self::GATEWAYS[$slug])) {
+            return null;
+        }
+
+        $row = $this->stored()[$slug] ?? [];
+        $secret = Crypto::decrypt((string) ($row['secret_key_enc'] ?? ''));
+
+        return new GatewayConfig(
+            slug: $slug,
+            label: self::GATEWAYS[$slug],
+            enabled: (bool) ($row['enabled'] ?? false),
+            testMode: (bool) ($row['test_mode'] ?? true),
+            publicKey: (string) ($row['public_key'] ?? ''),
+            secretKey: $secret,
+            merchantId: (string) ($row['merchant_id'] ?? ''),
+        );
     }
 
     /** Decrypted secret for a server-side gateway call. Never expose this. */

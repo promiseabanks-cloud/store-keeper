@@ -88,7 +88,12 @@ add_action('plugins_loaded', static function (): void {
             $container->get(\StoreKeeper\Commerce\Orders\OrderService::class),
             $container->get(\StoreKeeper\Commerce\Orders\OrderRepository::class),
             $container->get(\StoreKeeper\Commerce\Customers\CustomerService::class),
+            $container->get(\StoreKeeper\Commerce\Payments\PaymentService::class),
             $api
+        ))->register();
+
+        (new \StoreKeeper\Commerce\Rest\WebhookController(
+            $container->get(\StoreKeeper\Commerce\Payments\PaymentService::class)
         ))->register();
 
         (new \StoreKeeper\Commerce\Rest\SettingsController(

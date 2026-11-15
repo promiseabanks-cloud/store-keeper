@@ -388,7 +388,7 @@ final class OrderService
         }
 
         $method = (string) ($data['method'] ?? 'bank_transfer');
-        if (!in_array($method, ['bank_transfer', 'virtual_account', 'cash', 'pos_terminal', 'paystack', 'flutterpay', 'opay', 'flutterwave', 'pay_on_delivery', 'gateway3'], true)) {
+        if (!in_array($method, ['bank_transfer', 'virtual_account', 'cash', 'pos_terminal', 'paystack', 'opay', 'flutterwave', 'pay_on_delivery', 'gateway3'], true)) {
             throw new ValidationFailed('Unknown payment method.', ['method' => 'Unsupported.']);
         }
 
