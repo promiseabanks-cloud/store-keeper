@@ -8,7 +8,7 @@ of it is production configuration.
 
 | Piece | Value |
 | --- | --- |
-| Preview host | `pv-bd9d595656cc-6076b723-3ee9-4dad-93ea-af81d949f5c6.style.dev` (changes when the workspace is restored) |
+| Preview host | `pv-bd9d595656cc-1a9b80e5-e62e-4423-adb3-9697a1f81e03.style.dev` (changes when the workspace is restored; update `SK_PREVIEW_HOST`, run `wp search-replace`, restart) |
 | Store Keeper back office | `https://<preview-host>/ladies-corner/wp-admin/admin.php?page=storekeeper` |
 | Network admin | `https://<preview-host>/wp-admin/` |
 | Subsite | `/ladies-corner/` (`Ladies Corner`) |

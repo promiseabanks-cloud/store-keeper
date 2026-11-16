@@ -64,6 +64,17 @@ orders) and `OrderService` calls it on create and on every status change. Tested
   appeared in the list. In the browser: Customers, Prices, Locations and Staff
   tabs all render live data (screenshots in `artifacts/`).
 
+## Back-office design upgrade
+
+The screens were rendered inside a stock WordPress page: WP tabs, WP buttons, WP
+notice boxes. They are now their own app shell — a dark section rail with the
+store name, a light workspace with a page header and live chips, one type scale,
+indigo primary actions, soft status pills and borderless tables. The WordPress
+admin bar, menu and footer are hidden on this screen only, and the rail carries
+`View store`, `WordPress admin`, the signed-in user and sign-out. Below 900 px
+the rail becomes a scrollable strip, so the phone layout stays one-handed.
+See `docs/DESIGN.md` for the tokens and rules.
+
 ## Not done yet
 
 - **Special-price and customer-detail screens.** The endpoints exist; there is no

@@ -40,6 +40,18 @@ final class Menu
             );
         });
 
+        // The plugin screen is its own app shell, so it marks the body rather
+        // than fighting WordPress styles from the inside.
+        add_filter('admin_body_class', static function (string $classes): string {
+            $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+
+            if ($screen !== null && str_contains((string) $screen->id, self::SLUG)) {
+                return trim($classes . ' storekeeper-app');
+            }
+
+            return $classes;
+        });
+
         add_action('admin_enqueue_scripts', static function (string $hook): void {
             if (!str_contains($hook, self::SLUG)) {
                 return;
@@ -69,15 +81,16 @@ final class Menu
                 'nonce' => wp_create_nonce('wp_rest'),
                 'currency' => Brand::CURRENCY,
                 'storeName' => get_bloginfo('name'),
+                'userName' => wp_get_current_user()->display_name,
+                'wpAdminUrl' => admin_url(),
+                'siteUrl' => home_url('/'),
+                'logoutUrl' => wp_logout_url(),
             ]);
         });
     }
 
     public static function render(): void
     {
-        echo '<div class="wrap storekeeper-wrap">';
-        echo '<h1>' . esc_html(Brand::NAME) . '</h1>';
-        echo '<div id="storekeeper-admin"><p class="storekeeper-loading">Loading your store…</p></div>';
-        echo '</div>';
+        echo '<div class="sk-root" id="storekeeper-admin"><p class="storekeeper-loading">Loading your store…</p></div>';
     }
 }

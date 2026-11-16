@@ -1131,17 +1131,51 @@
             return el('p', { className: 'storekeeper-loading' }, 'Loading your store…');
         }
 
-        return el('div', null,
-            el('div', { className: 'sk-tabs' },
-                [['dashboard', 'Dashboard'], ['products', 'Products'], ['orders', 'Orders'], ['customers', 'Customers'], ['prices', 'Prices'], ['locations', 'Locations'], ['staff', 'Staff'], ['settings', 'Gateways']].map(function (pair) {
-                    return el('button', {
-                        key: pair[0],
-                        type: 'button',
-                        className: 'sk-tab' + (tab === pair[0] ? ' is-active' : ''),
-                        onClick: function () { setTab(pair[0]); }
-                    }, pair[1]);
-                })
-            ),
+        var sections = [
+            ['dashboard', 'Overview', 'What needs attention today'],
+            ['products', 'Products', 'Catalogue, variants and stock'],
+            ['orders', 'Orders', 'Every sale, every channel'],
+            ['customers', 'Customers', 'People and wholesale accounts'],
+            ['prices', 'Prices', 'Price lists and quantity tiers'],
+            ['locations', 'Locations', 'Shops and warehouses'],
+            ['staff', 'Staff', 'Who works in this store'],
+            ['settings', 'Gateways', 'Where customers pay you']
+        ];
+        var current = sections.filter(function (section) { return section[0] === tab; })[0] || sections[0];
+
+        return el('div', { className: 'sk-shell' },
+            el('aside', { className: 'sk-rail' },
+                el('div', { className: 'sk-brand' },
+                    el('span', { className: 'sk-brand-mark' }, 'SK'),
+                    el('div', { className: 'sk-brand-text' },
+                        el('strong', null, config.storeName || 'Store Keeper'),
+                        el('span', null, 'Commerce'))),
+                el('nav', { className: 'sk-nav', 'aria-label': 'Store sections' },
+                    sections.map(function (section) {
+                        return el('button', {
+                            key: section[0],
+                            type: 'button',
+                            className: 'sk-nav-item' + (tab === section[0] ? ' is-active' : ''),
+                            onClick: function () { setTab(section[0]); }
+                        }, section[1]);
+                    })),
+                el('div', { className: 'sk-rail-foot' },
+                    el('a', { className: 'sk-rail-link', href: config.siteUrl }, 'View store'),
+                    el('a', { className: 'sk-rail-link', href: config.wpAdminUrl }, 'WordPress admin'),
+                    el('span', { className: 'sk-user' }, 'Signed in as ' + (config.userName || 'staff')),
+                    el('a', { className: 'sk-rail-link sk-rail-link-quiet', href: config.logoutUrl }, 'Sign out'))),
+
+            el('main', { className: 'sk-main' },
+                el('header', { className: 'sk-topbar' },
+                    el('div', null,
+                        el('p', { className: 'sk-eyebrow' }, config.storeName || 'Store Keeper'),
+                        el('h1', { className: 'sk-page-title' }, current[1]),
+                        el('p', { className: 'sk-page-sub' }, current[2])),
+                    el('div', { className: 'sk-topbar-meta' },
+                        el('span', { className: 'sk-chip' }, overview.orders_today + ' orders today'),
+                        el('span', { className: 'sk-chip sk-chip-muted' }, overview.stock_units.toLocaleString() + ' units on hand'))),
+
+                el('div', { className: 'sk-content' },
 
             tab === 'dashboard'
                 ? el('div', null,
@@ -1243,6 +1277,8 @@
             el('p', { className: 'sk-footnote' },
                 'Store Keeper · catalogue, stock, orders, customers, prices, payments and staff in one place. ' +
                 'The storefront and POS arrive in the next phases; this screen reads live data.')
+                )
+            )
         );
     }
 
