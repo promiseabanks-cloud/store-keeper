@@ -37,6 +37,9 @@ use StoreKeeper\Commerce\Rest\Api;
 register_activation_hook(__FILE__, static function (): void {
     $container = Plugin::container();
     (new Installer($container->get(Connection::class), Plugin::migrationsRoot()))->activate();
+
+    // Storefront URLs (/shop/, /product/{slug}/) need their rules on disk.
+    \StoreKeeper\Commerce\Storefront\Storefront::activate();
 });
 
 add_action('plugins_loaded', static function (): void {
@@ -62,6 +65,11 @@ add_action('plugins_loaded', static function (): void {
 
     // Phase 2 screens: the back office menu and its REST endpoints.
     \StoreKeeper\Commerce\Admin\Menu::register();
+
+    // Phase 4: the storefront's routes, block and templates.
+    $storefront = $container->get(\StoreKeeper\Commerce\Storefront\CatalogView::class);
+    \StoreKeeper\Commerce\Storefront\Storefront::register($storefront);
+    \StoreKeeper\Commerce\Storefront\Blocks::register($storefront);
 
     add_action('rest_api_init', static function () use ($container): void {
         $api = new Api(

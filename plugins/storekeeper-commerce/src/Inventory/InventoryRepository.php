@@ -168,6 +168,44 @@ final class InventoryRepository
         );
     }
 
+    /**
+     * Online availability for many variants at once, so a product grid costs one
+     * query instead of one per variant (§9.1).
+     *
+     * @param list<int> $variantIds
+     * @return array<int,int> variant id => available pieces
+     */
+    public function availableOnlineMany(array $variantIds): array
+    {
+        $variantIds = array_values(array_unique(array_map('intval', $variantIds)));
+        if ($variantIds === []) {
+            return [];
+        }
+
+        $prefix = $this->db->prefix();
+        $placeholders = implode(',', array_fill(0, count($variantIds), '?'));
+        $rows = $this->db->select(
+            sprintf(
+                'SELECT l.variant_id, COALESCE(SUM(l.on_hand - l.reserved), 0) AS available
+                   FROM %sstock_levels l
+                   JOIN %slocations loc ON loc.id = l.location_id
+                  WHERE l.variant_id IN (' . $placeholders . ')
+                    AND loc.sellable_online = 1 AND loc.is_active = 1
+                  GROUP BY l.variant_id',
+                $prefix,
+                $prefix
+            ),
+            $variantIds
+        );
+
+        $available = array_fill_keys($variantIds, 0);
+        foreach ($rows as $row) {
+            $available[(int) $row['variant_id']] = (int) $row['available'];
+        }
+
+        return $available;
+    }
+
     public function onHandAt(int $variantId, int $locationId): int
     {
         return (int) $this->db->scalar(

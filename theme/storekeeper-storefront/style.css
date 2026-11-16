@@ -1,0 +1,15 @@
+/*
+Theme Name: Store Keeper Storefront
+Description: Lean storefront theme for Store Keeper shops: product grid, product pages with option swatches, categories and search. Requires the Store Keeper Commerce plugin for its data and styles.
+Version: 0.1.0
+Requires at least: 6.5
+Requires PHP: 8.2
+Author: Store Keeper
+License: Proprietary
+Text Domain: storekeeper
+Tags: e-commerce, custom-menu, editor-style
+*/
+
+/* All storefront styling lives in the plugin's storefront.css so it also applies
+   to the product grid block inside any other theme. This file holds the theme
+   header and nothing else on purpose. */

@@ -26,6 +26,8 @@ use StoreKeeper\Commerce\Payments\PaymentService;
 use StoreKeeper\Commerce\Pricing\PricingRepository;
 use StoreKeeper\Commerce\Pricing\PricingService;
 use StoreKeeper\Commerce\Reports\OverviewService;
+use StoreKeeper\Commerce\Storefront\CatalogView;
+use StoreKeeper\Commerce\Storefront\CustomerContext;
 
 /**
  * Builds the engine container for the current site (§6.1, §7.3).
@@ -139,6 +141,17 @@ final class Plugin
 
         $container->singleton(OverviewService::class, static fn (Container $c): OverviewService => new OverviewService(
             $c->get(Connection::class)
+        ));
+
+        // Storefront read model (§22.5): prices always resolve through the engine.
+        $container->singleton(CustomerContext::class, static fn (): CustomerContext => new CustomerContext());
+        $container->singleton(CatalogView::class, static fn (Container $c): CatalogView => new CatalogView(
+            $c->get(CatalogRepository::class),
+            $c->get(PricingService::class),
+            $c->get(PricingRepository::class),
+            $c->get(InventoryRepository::class),
+            $c->get(Connection::class),
+            $c->get(CustomerContext::class)
         ));
 
         $container->singleton(GatewaySettings::class, static fn (Container $c): GatewaySettings => new GatewaySettings(

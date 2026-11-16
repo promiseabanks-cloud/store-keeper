@@ -75,6 +75,14 @@ admin bar, menu and footer are hidden on this screen only, and the rail carries
 the rail becomes a scrollable strip, so the phone layout stays one-handed.
 See `docs/DESIGN.md` for the tokens and rules.
 
+## Storefront
+
+The shop is live on the same stock and prices: `/shop/`, category pages, search,
+product pages with option swatches that switch photos, and Open Graph/canonical
+metadata. Prices resolve through the browsing customer's group. Routes, caching,
+the theme and what remains (cart, checkout, OTP sign-in) are in
+[docs/STOREFRONT.md](STOREFRONT.md).
+
 ## Not done yet
 
 - **Special-price and customer-detail screens.** The endpoints exist; there is no

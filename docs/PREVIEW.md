@@ -96,7 +96,17 @@ $WP plugin activate --network storekeeper-commerce storekeeper-platform
 $WP site create --slug=ladies-corner --title="Ladies Corner"
 $WP storekeeper migrate --network
 SK_SEED_BLOG=2 $WP --url="https://$PREVIEW_HOST/ladies-corner" eval-file tools/preview/seed.php
+
+# Storefront theme, routes and demo product photos.
+ln -sfn "$PWD/theme/storekeeper-storefront" /tmp/wsp-preview/wordpress/wp-content/themes/storekeeper-storefront
+$WP --url="https://$PREVIEW_HOST/ladies-corner" theme activate storekeeper-storefront
+$WP --url="https://$PREVIEW_HOST/ladies-corner" rewrite flush
+$WP --url="https://$PREVIEW_HOST/ladies-corner" eval-file tools/preview/demo-photos.php
 ```
+
+Storefront URLs: `/ladies-corner/`, `/ladies-corner/shop/`,
+`/ladies-corner/product/{slug}/`, `/ladies-corner/product-category/{slug}/`.
+The `wp-admin` link in the back-office rail still works; the shop hides nothing.
 
 ## Preview wp-config notes
 

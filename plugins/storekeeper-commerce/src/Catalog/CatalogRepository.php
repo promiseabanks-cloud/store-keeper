@@ -47,6 +47,32 @@ final class CatalogRepository
         );
     }
 
+    /** @return array<string,mixed>|null */
+    public function productBySlug(string $slug): ?array
+    {
+        return $this->db->first(
+            sprintf('SELECT * FROM %sproducts WHERE slug = ?', $this->db->prefix()),
+            [$slug]
+        );
+    }
+
+    /** @return array<string,mixed>|null */
+    public function categoryBySlug(string $slug): ?array
+    {
+        return $this->db->first(
+            sprintf('SELECT * FROM %scategories WHERE slug = ?', $this->db->prefix()),
+            [$slug]
+        );
+    }
+
+    /** @return list<array<string,mixed>> */
+    public function categories(): array
+    {
+        return $this->db->select(
+            sprintf('SELECT * FROM %scategories ORDER BY sort_order ASC, name ASC', $this->db->prefix())
+        );
+    }
+
     public function productSlugExists(string $slug): bool
     {
         return (bool) $this->db->scalar(

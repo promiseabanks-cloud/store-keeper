@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "storekeeper/product-grid",
+  "title": "Product grid",
+  "category": "widgets",
+  "icon": "grid-view",
+  "description": "Live products from the shop, with the visitor's own group prices.",
+  "textdomain": "storekeeper",
+  "attributes": {
+    "heading": {
+      "type": "string",
+      "default": ""
+    },
+    "limit": {
+      "type": "number",
+      "default": 8
+    },
+    "category": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "supports": {
+    "html": false,
+    "align": [
+      "wide",
+      "full"
+    ]
+  },
+  "editorScript": "file:./index.js"
+}

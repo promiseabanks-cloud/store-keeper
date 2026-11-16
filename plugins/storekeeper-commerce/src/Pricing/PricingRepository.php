@@ -54,6 +54,54 @@ final class PricingRepository
     }
 
     /**
+     * The single-unit price a product card shows, for many variants at once.
+     *
+     * The unit price applies when it exists; a list whose cheapest tier starts at
+     * a higher quantity (a wholesale list from 12 pieces) shows that tier instead,
+     * matching what PricingService resolves for the same customer (§10.1).
+     *
+     * @param list<int> $variantIds
+     * @return array<int,int> variant id => amount in kobo
+     */
+    public function displayAmounts(int $priceListId, array $variantIds): array
+    {
+        $variantIds = array_values(array_unique(array_map('intval', $variantIds)));
+        if ($variantIds === []) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($variantIds), '?'));
+        $rows = $this->db->select(
+            sprintf(
+                'SELECT variant_id, min_qty, amount_kobo
+                   FROM %sprices
+                  WHERE price_list_id = ? AND pack_unit_id IS NULL
+                    AND variant_id IN (' . $placeholders . ')
+                  ORDER BY variant_id ASC, min_qty ASC',
+                $this->db->prefix()
+            ),
+            array_merge([$priceListId], $variantIds)
+        );
+
+        $single = [];
+        $cheapest = [];
+        foreach ($rows as $row) {
+            $variantId = (int) $row['variant_id'];
+            $amount = (int) $row['amount_kobo'];
+
+            if ((int) $row['min_qty'] === 1) {
+                $single[$variantId] = $amount;
+            }
+
+            if (!isset($cheapest[$variantId]) || $amount < $cheapest[$variantId]) {
+                $cheapest[$variantId] = $amount;
+            }
+        }
+
+        return $single + $cheapest;
+    }
+
+    /**
      * Best tier whose minimum quantity is reached (§10.1 step 2).
      *
      * @return array<string,mixed>|null
