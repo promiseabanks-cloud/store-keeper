@@ -8,7 +8,7 @@ of it is production configuration.
 
 | Piece | Value |
 | --- | --- |
-| Preview host | `pv-bd9d595656cc-1a9b80e5-e62e-4423-adb3-9697a1f81e03.style.dev` (changes when the workspace is restored; update `SK_PREVIEW_HOST`, run `wp search-replace`, restart) |
+| Preview host | `pv-bd9d595656cc-7eb4904d-5f7f-40a7-a319-04bff4ef9dcc.style.dev` (changes when the workspace is restored; update `SK_PREVIEW_HOST`, run `wp search-replace`, restart) |
 | Store Keeper back office | `https://<preview-host>/ladies-corner/wp-admin/admin.php?page=storekeeper` |
 | Network admin | `https://<preview-host>/wp-admin/` |
 | Subsite | `/ladies-corner/` (`Ladies Corner`) |
@@ -24,6 +24,14 @@ code edits are live without copying files.
 
 Seeded demo data (`tools/preview/seed.php`): 3 products / 7 variants, 310 units
 of opening stock at *Balogun shop*, one approved wholesale customer (Ada Obi).
+
+The preview also sets two storefront options the cart/checkout tests rely on:
+`storekeeper_flat_shipping_kobo = 150000` (a ₦1,500 delivery option appears beside
+free pickup) and `storekeeper_bank_details` (shown on the order confirmation).
+Clear the first option to see checkout with pickup only.
+
+Storefront routes: `/ladies-corner/cart/`, `/ladies-corner/checkout/` and
+`/ladies-corner/order-received/{number}/?token=…`.
 
 ## Opening the back office
 
@@ -59,8 +67,8 @@ reports that plainly rather than half-starting.
 mkdir -p /tmp/wsp-tools /tmp/wsp-preview && cd /tmp/wsp-tools
 
 # PHP (static build — the bulk build includes mysqli, gd, intl, redis)
-curl -fsSL -o php.tar.gz https://dl.static-php.dev/static-php-cli/bulk/php-8.3.14-cli-linux-x86_64.tar.gz
-tar xzf php.tar.gz && mv php-8.3.14-cli-linux-x86_64/php ./php
+curl -fL --retry 5 --retry-all-errors -o php.tar.gz https://dl.static-php.dev/static-php-cli/bulk/php-8.3.14-cli-linux-x86_64.tar.gz
+tar xzf php.tar.gz   # extracts ./php directly
 
 # MariaDB
 curl -fsSL -o mariadb.tar.gz https://archive.mariadb.org/mariadb-11.4.4/bintar-linux-systemd-x86_64/mariadb-11.4.4-linux-systemd-x86_64.tar.gz
@@ -73,6 +81,10 @@ cd mariadb-11.4.4-linux-systemd-x86_64
 curl -fsSL -o /tmp/wsp-tools/wp-cli.phar https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
 ```
 
+Run WP-CLI with `-d memory_limit=1G`: unpacking WordPress through the phar
+exhausts the 128 MB default and fails half-way. The same applies to `core download`,
+`eval-file` and seeding.
+
 Database and WordPress:
 
 ```bash
@@ -83,7 +95,7 @@ DB=/tmp/wsp-tools/mariadb-11.4.4-linux-systemd-x86_64/bin/mariadb
 $DB --no-defaults --socket=/tmp/wsp-tools/mysql.sock -uroot \
   -e 'CREATE DATABASE storekeeper; CREATE DATABASE storekeeper_test;'
 
-WP="/tmp/wsp-tools/php /tmp/wsp-tools/wp-cli.phar --path=/tmp/wsp-preview/wordpress"
+WP="/tmp/wsp-tools/php -d memory_limit=1G /tmp/wsp-tools/wp-cli.phar --path=/tmp/wsp-preview/wordpress"
 $WP core multisite-install --url="https://$PREVIEW_HOST" --subdomains=0 \
   --title="Store Keeper" --admin_user=admin --admin_password='StoreKeeper2026!' \
   --admin_email=admin@example.test --skip-email
@@ -116,11 +128,14 @@ The preview's `wp-config.php` differs from a normal install in three ways:
   whatever hostname the tunnel gives it. Loopback requests (health checks) are
   mapped onto `SK_PREVIEW_HOST`, because multisite only knows the registered
   preview domain and would otherwise redirect them to port 80.
-- The scheme is `https` and `$_SERVER['HTTPS'] = 'on'`, because the cloud
-  preview proxy terminates TLS. Without that, `force_ssl_admin()`
-  bounces every `wp-admin` request in a loop. The side effect is that auth
-  cookies are marked `secure`, so a plain-HTTP `curl` client will not replay
-  them; a browser over the preview URL is unaffected.
+- The scheme is `https` and `$_SERVER['HTTPS'] = 'on'` for any host that is not
+  loopback, because the cloud preview proxy terminates TLS. This is required for
+  more than `force_ssl_admin()`: WordPress builds asset URLs with
+  `set_url_scheme()`, which falls back to the *request* scheme, so without it the
+  page is served with `http://` CSS/JS URLs and the browser blocks them as mixed
+  content (the stylesheet silently does not load). The side effect is that auth
+  cookies are marked `secure`, so a plain-HTTP `curl` client will not replay them;
+  a browser over the preview URL is unaffected.
 - `WP_DEBUG` is on and logs to `/tmp/wsp-preview/debug.log`, never to disk in
   the workspace.
 
@@ -134,6 +149,16 @@ behind them, so the router strips the subsite segment, executes the real script
 with corrected `SCRIPT_NAME`, and lets WordPress resolve the blog from the
 request URI. Requests that are neither files nor scripts fall through to
 `index.php`.
+
+## Tests without the preview
+
+`tools/preview/run-tests.sh` starts MariaDB if it is not running and then runs
+PHPUnit against `storekeeper_test`. Each cloud command gets a fresh process tree,
+so run it per command rather than relying on a server started earlier:
+
+```bash
+tools/preview/run-tests.sh
+```
 
 ## Known gaps in this environment
 

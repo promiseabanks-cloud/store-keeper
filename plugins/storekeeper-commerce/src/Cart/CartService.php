@@ -62,6 +62,10 @@ final class CartService
     {
         $cart = $this->find($tokenHash);
 
+        if ($cart !== null && $cart['status'] !== 'active') {
+            return $this->reopen($cart, $customerId);
+        }
+
         if ($cart !== null) {
             $changes = ['expires_at' => $this->expiry()];
             if ($customerId !== null && ($cart['customer_id'] === null || (int) $cart['customer_id'] !== $customerId)) {
@@ -144,6 +148,10 @@ final class CartService
      */
     public function add(array $cart, array $input, ?array $customer): array
     {
+        if ($cart['status'] !== 'active') {
+            $cart = $this->reopen($cart, null);
+        }
+
         $variantId = (int) ($input['variant_id'] ?? 0);
         $qty = (int) ($input['qty'] ?? 1);
         $packUnitId = isset($input['pack_unit_id']) && (int) $input['pack_unit_id'] > 0
@@ -189,6 +197,10 @@ final class CartService
      */
     public function setQty(array $cart, int $lineId, int $qty, ?array $customer): array
     {
+        if ($cart['status'] !== 'active') {
+            $cart = $this->reopen($cart, null);
+        }
+
         $line = $this->carts->lineById((int) $cart['id'], $lineId);
 
         if ($line === null) {
@@ -218,6 +230,10 @@ final class CartService
      */
     public function remove(array $cart, int $lineId, ?array $customer): array
     {
+        if ($cart['status'] !== 'active') {
+            $cart = $this->reopen($cart, null);
+        }
+
         $line = $this->carts->lineById((int) $cart['id'], $lineId);
 
         if ($line === null) {
@@ -239,6 +255,31 @@ final class CartService
     public function lineCount(array $cart): int
     {
         return $this->carts->lineCount((int) $cart['id']);
+    }
+
+    /**
+     * A converted or abandoned cart is reused as a clean cart, with a new uuid so
+     * its next checkout cannot replay the order it already produced. Without this
+     * a returning visitor's cart stayed "converted" and could never check out
+     * again.
+     *
+     * @param array<string,mixed> $cart
+     * @return array<string,mixed>
+     */
+    private function reopen(array $cart, ?int $customerId): array
+    {
+        $this->carts->clear((int) $cart['id']);
+        $now = $this->clock->nowString();
+        $this->carts->update((int) $cart['id'], [
+            'uuid' => Uuid::v4(),
+            'customer_id' => $customerId ?? $cart['customer_id'],
+            'status' => 'active',
+            'converted_order_id' => null,
+            'expires_at' => $this->expiry(),
+            'updated_at' => $now,
+        ]);
+
+        return $this->carts->byId((int) $cart['id']) ?? throw new \RuntimeException('Cart was not reopened.');
     }
 
     /** @param array<string,mixed> $cart */

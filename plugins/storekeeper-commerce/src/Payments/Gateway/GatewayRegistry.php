@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace StoreKeeper\Commerce\Payments\Gateway;
 
 use StoreKeeper\Commerce\Core\Exception\ValidationFailed;
+use StoreKeeper\Commerce\Payments\GatewaySettings;
 
 /**
  * The configured gateways, one adapter each (§13.2).
@@ -60,7 +61,7 @@ final class GatewayRegistry
     {
         $slugs = [];
 
-        foreach (array_keys(GatewaySettingsMap::LABELS) as $slug) {
+        foreach (array_keys(GatewaySettings::GATEWAYS) as $slug) {
             if ($this->optional($slug) !== null) {
                 $slugs[] = $slug;
             }

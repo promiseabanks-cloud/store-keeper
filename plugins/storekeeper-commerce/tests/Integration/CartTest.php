@@ -167,6 +167,26 @@ final class CartTest extends TestCase
         self::assertSame(0, $this->store->cart->lineCount($cart));
     }
 
+    public function testAConvertedCartReopensAsANewCartInsteadOfReusingItsOrder(): void
+    {
+        $cart = $this->cart('converted-a');
+        $this->store->cart->add($cart, ['variant_id' => $this->variantId, 'qty' => 1], null);
+        $this->store->cart->markConverted($cart, 999);
+
+        $reopened = $this->store->cart->add($this->store->cart->findAny(hash('sha256', 'converted-a')), [
+            'variant_id' => $this->variantId,
+            'qty' => 2,
+        ], null);
+
+        self::assertSame('active', $reopened['status']);
+        self::assertNotSame((string) $cart['uuid'], (string) $reopened['uuid'], 'A new uuid avoids replaying the old order');
+        self::assertSame(2, $reopened['item_count']);
+        self::assertSame(1000000, $reopened['subtotal_kobo']);
+
+        $row = $this->store->cart->findAny(hash('sha256', 'converted-a'));
+        self::assertNull($row['converted_order_id']);
+    }
+
     /** @return array<string,mixed> */
     private function cart(string $token): array
     {

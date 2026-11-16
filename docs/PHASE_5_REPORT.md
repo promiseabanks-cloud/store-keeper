@@ -76,17 +76,59 @@ New coverage:
 | `CheckoutTest` (10 tests) | guest order + reservation + cart conversion, duplicate submit, delivery fee/address, missing address, stock taken before submit, empty cart, group minimum, unknown payment method, guest phone not hijacking an account, signed-in identity |
 | `HoldExpiryTest` (5 tests) | expired hold cancelled + stock released, live hold untouched, completed order untouched, no hold untouched, second run is a no-op |
 
+## Browser and end-to-end verification
+
+A throwaway WordPress 6.7.2 multisite preview was rebuilt against MariaDB 11.4 and
+PHP 8.3 (`docs/PREVIEW.md`) and the whole flow was exercised **in the Cloud browser**
+as well as with a cookie-jar `curl` script:
+
+- product page → **Add to cart** → `/cart/` shows the item, ₦8,500 each, count badge
+  and subtotal;
+- quantity update to 2 re-prices and updates the subtotal; "Remove" and "Clear" work;
+- adding more than the ledger holds shows `Only 40 left in stock.` and leaves the
+  cart unchanged;
+- `/checkout/` lists pickup (free) and delivery (₦1,500 from the option), bank
+  transfer, and the live order summary;
+- submitting delivery without an address redirects back to `/checkout/` with
+  `Street address is required for delivery.` and creates **no** order;
+- a complete guest checkout (browser and curl) created order `SK-00005` for
+  ₦8,500 + ₦1,500 = ₦10,000, reserved the stock, converted the cart and redirected to
+  `/order-received/SK-00005/?token=…`, which shows the bank details, total and
+  delivery address;
+- the confirmation page is a 404 without the order token;
+- a repeated submit of a converted cart returns the same order instead of creating a
+  second one;
+- adding a new item after a completed order opens a fresh cart and produces a new
+  order (`SK-00004` then `SK-00005`), which is the fix for the reopening bug below;
+- the browser console reported no errors after the stylesheet fix.
+
+Screenshots: `artifacts/cart.png`, `artifacts/checkout.png`,
+`artifacts/order-received.png`.
+
+### Bugs found and fixed during this pass
+
+1. **`GatewayRegistry::configuredSlugs()` referenced a non-existent class**
+   (`GatewaySettingsMap`). The checkout page lists configured gateways, so
+   `/checkout/` returned a 500 until it was pointed at `GatewaySettings::GATEWAYS`.
+   No test had ever called this method because no earlier screen listed gateways.
+2. **A converted cart could never check out again.** `CartService::open()` returned
+   the cart whatever its status, so adding a new item wrote lines into a cart that
+   checkout then treated as already converted and replayed the old order. It now
+   reopens a converted/abandoned cart as a clean cart with a **new uuid**, so the
+   next order cannot collide with the old idempotency key. Covered by
+   `CartTest::testAConvertedCartReopensAsANewCartInsteadOfReusingItsOrder`.
+3. **Preview styling was invisible** (preview config, not plugin code): behind the
+   TLS proxy WordPress saw a plain-HTTP request and emitted `http://` asset URLs,
+   which the browser blocked as mixed content. Marking non-loopback requests as
+   HTTPS in `wp-config.php` fixes it; recorded in `docs/PREVIEW.md`.
+
 ## What was not verified
 
-- **No browser pass.** The preview WordPress install was not rebuilt in this
-  environment, so the cart, checkout and confirmation templates were syntax-checked
-  and their services tested, but the pages were never rendered. They are the first
-  thing to look at when the preview is restored (`wp rewrite flush` is required for
-  the new routes).
 - **No real gateway payment.** The gateway branch of checkout was not exercised; the
-  test checkout is wired with no configured gateways. OPay still lacks credentials
-  (Q-001b).
+  preview has no configured gateways. OPay still lacks credentials (Q-001b).
 - **No real WhatsApp/SMS or courier**, and no notification is sent by checkout.
+- **No wholesale checkout in the browser**, because OTP sign-in does not exist yet;
+  the signed-in path is covered by `CheckoutTest` only.
 - **REST endpoints for cart/checkout were deliberately not shipped** (D-028). The
   storefront uses nonce-checked form posts to the same services.
 
