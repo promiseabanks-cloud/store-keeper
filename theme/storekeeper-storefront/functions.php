@@ -33,6 +33,16 @@ function skf_shop_url(): string
     return home_url('/shop/');
 }
 
+/** Items in this visitor's cart; 0 when the commerce plugin is not active. */
+function skf_cart_count(): int
+{
+    if (!class_exists(\StoreKeeper\Commerce\Storefront\CartSession::class)) {
+        return 0;
+    }
+
+    return \StoreKeeper\Commerce\Storefront\CartSession::count();
+}
+
 /** @return list<array{name:string,url:string,slug:string,count:int}> */
 function skf_categories(): array
 {

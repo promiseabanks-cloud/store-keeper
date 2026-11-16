@@ -162,6 +162,29 @@ final class OrderRepository
     }
 
     /**
+     * Open orders whose payment hold has run out (§9.5). Only an unpaid hold
+     * can expire; paid or handed-over orders never appear here.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function expiredHolds(string $now, int $limit = 100): array
+    {
+        return $this->db->select(
+            sprintf(
+                "SELECT id, number, hold_expires_at
+                   FROM %sorders
+                  WHERE status = 'open'
+                    AND hold_expires_at IS NOT NULL
+                    AND hold_expires_at <= ?
+                  ORDER BY hold_expires_at ASC, id ASC
+                  LIMIT ?",
+                $this->db->prefix()
+            ),
+            [$now, $limit]
+        );
+    }
+
+    /**
      * Orders with the customer name attached, for the back office list.
      *
      * @param array<string,mixed> $filters

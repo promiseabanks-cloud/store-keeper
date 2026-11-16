@@ -29,6 +29,14 @@
             <?php endforeach; ?>
         </nav>
 
+        <a class="skf-cart-link" href="<?php echo esc_url(home_url('/cart/')); ?>">
+            Cart
+            <?php $skfCartCount = skf_cart_count(); ?>
+            <?php if ($skfCartCount > 0) : ?>
+                <span class="skf-cart-link__count"><?php echo esc_html((string) $skfCartCount); ?></span>
+            <?php endif; ?>
+        </a>
+
         <form class="skf-search" role="search" method="get" action="<?php echo esc_url(skf_shop_url()); ?>">
             <label class="screen-reader-text" for="skf-search-input">Search products</label>
             <input

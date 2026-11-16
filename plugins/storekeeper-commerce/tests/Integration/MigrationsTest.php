@@ -61,7 +61,7 @@ final class MigrationsTest extends TestCase
     {
         $store = TestStore::create();
         $first = $store->db->select(sprintf('SELECT migration FROM %sschema_migrations', $store->db->prefix()));
-        self::assertCount(6, $first);
+        self::assertCount(7, $first);
 
         // Running the migrator again is a no-op, as it is on plugin activation.
         $again = (new \StoreKeeper\Commerce\Core\SchemaMigrator($store->db, dirname(__DIR__, 2) . '/migrations'))->migrateAll();

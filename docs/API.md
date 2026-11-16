@@ -21,7 +21,8 @@ The engine and its HTTP-independent services are complete for this phase. REST c
 | Inventory | `/stock`, `/stock/movements`, `/stock/receipts`, `/stock/adjustments`, `/stock/transfers`, `/stock/counts`, `/locations` | Engine ready (`Inventory\InventoryService`); routes in Phase 2 |
 | Customers | `/customers`, `/customer-groups`, `/customers/{id}/approve` | Engine ready (`Customers\CustomerService`); routes in Phase 2 |
 | Orders | `/orders` (GET/POST), `/orders/{uuid}`, `/orders/{uuid}/payments`, `/orders/{uuid}/cancel` | Shipped in Phase 2 |
-| Storefront auth, cart, checkout | `/auth/*`, `/cart`, `/checkout` | Phase 4 |
+| Storefront auth | `/auth/*` | Phase 4 (not built) |
+| Storefront cart, checkout | storefront form posts (see below) | **Shipped as server-rendered forms, not REST** (D-028) |
 | Payments | `/orders/{uuid}/payment-link`, `/webhooks/{gateway}` | Shipped in Phase 3 (checkout, verify, signed webhooks); virtual accounts and refunds are not built yet |
 | Fulfilment | `/shipments/*`, `/track/{number}` | Phase 4 |
 | POS / sync | `/devices/*`, `/sync/pull`, `/sync/push` | Phase 5 |
@@ -49,6 +50,38 @@ Error codes defined so far (mapped to HTTP status in `Rest\ErrorMapper` when con
 | GET | `/orders/{uuid}` | `create_orders` | Order, items and payment rows. |
 | POST | `/orders/{uuid}/payments` | `confirm_payments` | Body: `method`, optional `amount_kobo`, `reference`, `note`. Defaults to the outstanding balance; overpayment is refused. |
 | POST | `/orders/{uuid}/cancel` | `cancel_orders` | Body: `reason`. Releases reservations. |
+
+## Cart and checkout (shipped, storefront forms)
+
+The storefront is server-rendered and a guest has no REST identity, so cart and
+checkout are ordinary `POST`s to `admin-post.php` with a nonce, not JSON endpoints
+(D-028). They call the same engine services a controller would; nothing is
+computed in the template.
+
+| Action | POST `action` | Fields | Notes |
+|---|---|---|---|
+| Add to cart | `storekeeper_cart` | `cart_action=add`, `variant_id`, `qty`, optional `pack_unit_id` | Refused when the quantity exceeds online availability (`Only N left`). |
+| Change quantity | `storekeeper_cart` | `cart_action=update`, `line_id`, `qty` | Re-prices the line at the new tier. |
+| Remove / clear | `storekeeper_cart` | `cart_action=remove\|clear`, `line_id` | |
+| Place order | `storekeeper_checkout` | `name`, `phone`, `shipping=pickup\|delivery`, address fields when delivering (`line1`, `lga`, `state`, optional `line2`, `city`, `landmark`), `payment_method`, optional `note` | Creates the order at `channel=web`, reserves stock, converts the cart, then redirects to the order page or the gateway. |
+
+- Identity: a 32-byte random token in the `skf_cart` cookie (HTTP-only, Secure,
+  SameSite=Lax); only its SHA-256 is stored in `{p}carts`. The cookie carries no
+  cart contents.
+- Prices, product names, stock and shipping fees are resolved server-side on every
+  read and again at submit. A posted `customer_group_id`, `unit_price_kobo`,
+  `discount_kobo` or `location_id` is ignored.
+- The cart is not a reservation: stock is held only when the order is created
+  (`OrderService`), and the hold expires per §9.5 (hourly job /
+  `wp storekeeper orders expire-holds`).
+- A second submit of a converted cart returns the order it already created; it does
+  not charge or reserve twice.
+- Shipping options: pickup (free) always, delivery (flat) only when
+  `storekeeper_flat_shipping_kobo` > 0. Payment options: bank transfer always, plus
+  each configured gateway (checkout calls `PaymentService::initialize()` and
+  redirects to the hosted page).
+- The confirmation page is `/order-received/{number}/?token={public_token}`; the
+  token is required and is the only way an order is readable without staff auth.
 
 ## Payments (shipped)
 

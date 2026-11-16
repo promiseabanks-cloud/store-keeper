@@ -177,6 +177,31 @@ get_header();
                 </div>
             <?php endforeach; ?>
 
+            <?php if ($selectedVariant !== null && $selectedVariant['in_stock']) : ?>
+                <form class="skf-add" method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                    <input type="hidden" name="action" value="storekeeper_cart">
+                    <input type="hidden" name="cart_action" value="add">
+                    <input type="hidden" name="variant_id" value="<?php echo esc_attr((string) $selectedVariant['id']); ?>">
+                    <?php wp_nonce_field('storekeeper_cart'); ?>
+
+                    <label class="skf-add__qty" for="skf-add-qty">
+                        <span>Qty</span>
+                        <input
+                            id="skf-add-qty"
+                            type="number"
+                            name="qty"
+                            value="1"
+                            min="1"
+                            max="<?php echo esc_attr((string) max(1, (int) $selectedVariant['available'])); ?>"
+                        >
+                    </label>
+
+                    <button type="submit" class="skf-button">Add to cart</button>
+                </form>
+            <?php elseif ($selectedVariant !== null) : ?>
+                <p class="skf-notice">This option is out of stock. Choose another colour or ask us when it is back.</p>
+            <?php endif; ?>
+
             <?php if ($product['description'] !== '') : ?>
                 <div class="skf-product__description">
                     <?php echo wp_kses_post(wpautop($product['description'])); ?>

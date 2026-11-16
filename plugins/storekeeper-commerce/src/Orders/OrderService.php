@@ -518,6 +518,32 @@ final class OrderService
         return $updated;
     }
 
+    /**
+     * Cancel every open order whose payment hold has run out and release its
+     * reservations (§9.5, §22.4). Runs from the hourly cron job and the
+     * `wp storekeeper orders expire-holds` command.
+     *
+     * @return array{expired:list<string>,failed:list<string>}
+     */
+    public function expireHolds(int $limit = 100): array
+    {
+        $expired = [];
+        $failed = [];
+
+        foreach ($this->orders->expiredHolds($this->clock->nowString(), $limit) as $row) {
+            $number = (string) $row['number'];
+
+            try {
+                $this->cancel((int) $row['id'], 'Payment hold expired', Actor::system());
+                $expired[] = $number;
+            } catch (\Throwable $error) {
+                $failed[] = $number . ': ' . $error->getMessage();
+            }
+        }
+
+        return ['expired' => $expired, 'failed' => $failed];
+    }
+
     /** @return array<string,mixed>|null */
     public function find(int $orderId): ?array
     {

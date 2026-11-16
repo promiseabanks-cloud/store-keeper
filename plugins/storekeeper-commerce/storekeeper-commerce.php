@@ -140,4 +140,8 @@ if (defined('WP_CLI') && WP_CLI) {
         'storekeeper stock',
         new \StoreKeeper\Commerce\Cli\StockCommand(Plugin::container()->get(\StoreKeeper\Commerce\Inventory\InventoryService::class))
     );
+    \WP_CLI::add_command(
+        'storekeeper orders',
+        new \StoreKeeper\Commerce\Cli\OrderCommand(Plugin::container()->get(\StoreKeeper\Commerce\Orders\OrderService::class))
+    );
 }

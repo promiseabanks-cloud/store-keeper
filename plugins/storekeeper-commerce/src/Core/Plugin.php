@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace StoreKeeper\Commerce\Core;
 
 use StoreKeeper\Commerce\Alerts\AlertService;
+use StoreKeeper\Commerce\Cart\CartRepository;
+use StoreKeeper\Commerce\Cart\CartService;
 use StoreKeeper\Commerce\Catalog\CatalogRepository;
 use StoreKeeper\Commerce\Catalog\CatalogService;
 use StoreKeeper\Commerce\Core\Audit\DatabaseAuditLogger;
@@ -12,6 +14,7 @@ use StoreKeeper\Commerce\Core\Database\Connection;
 use StoreKeeper\Commerce\Core\Database\WpdbConnection;
 use StoreKeeper\Commerce\Core\Hooks\WpHooks;
 use StoreKeeper\Commerce\Core\Idempotency\IdempotencyService;
+use StoreKeeper\Commerce\Checkout\CheckoutService;
 use StoreKeeper\Commerce\Customers\CustomerRepository;
 use StoreKeeper\Commerce\Customers\CustomerService;
 use StoreKeeper\Commerce\Inventory\InventoryRepository;
@@ -178,6 +181,29 @@ final class Plugin
             untrailingslashit(home_url('/'))
         ));
 
+        // Storefront cart and checkout (§22.5, D-026, D-027).
+        $container->singleton(CartRepository::class, static fn (Container $c): CartRepository => new CartRepository(
+            $c->get(Connection::class),
+            $c->get(Clock::class)
+        ));
+        $container->singleton(CartService::class, static fn (Container $c): CartService => new CartService(
+            $c->get(CartRepository::class),
+            $c->get(CatalogRepository::class),
+            $c->get(PricingService::class),
+            $c->get(InventoryRepository::class),
+            $c->get(Clock::class)
+        ));
+        $container->singleton(CheckoutService::class, static fn (Container $c): CheckoutService => new CheckoutService(
+            $c->get(CartRepository::class),
+            $c->get(CartService::class),
+            $c->get(OrderService::class),
+            $c->get(CustomerRepository::class),
+            $c->get(Clock::class),
+            (int) get_option(Brand::OPTION_PREFIX . 'flat_shipping_kobo', 0),
+            $c->get(GatewayRegistry::class)->configuredSlugs(),
+            $c->get(PaymentService::class)
+        ));
+
         // The engine's shared dependencies are looked up by interface.
         $container->instance(Connection::class, $container->get('db'));
         $container->instance(Audit\AuditLogger::class, $container->get(DatabaseAuditLogger::class));
@@ -189,6 +215,17 @@ final class Plugin
     public static function boot(): void
     {
         $container = self::container();
+
+        // §9.5: an unpaid hold expires and its stock is released. Hourly, and
+        // also runnable by hand through `wp storekeeper orders expire-holds`.
+        add_action('storekeeper_expire_holds', static function () use ($container): void {
+            $container->get(OrderService::class)->expireHolds(200);
+        });
+        add_action('init', static function (): void {
+            if (function_exists('wp_next_scheduled') && !wp_next_scheduled('storekeeper_expire_holds')) {
+                wp_schedule_event(time() + 300, 'hourly', 'storekeeper_expire_holds');
+            }
+        }, 20);
 
         // A store request always runs with exactly one blog context (§6.4).
         add_action('init', static function () use ($container): void {

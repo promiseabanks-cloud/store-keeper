@@ -23,6 +23,10 @@ final class Storefront
 
     public const PAGE = 'sk_page';
 
+    public const RECEIVED = 'sk_received';
+
+    public const ORDER = 'sk_order';
+
     public static function register(CatalogView $view): void
     {
         add_action('init', static function (): void {
@@ -30,8 +34,10 @@ final class Storefront
         });
 
         add_filter('query_vars', static function (array $vars): array {
-            return array_merge($vars, [self::VIEW, self::PRODUCT, self::CATEGORY, self::PAGE]);
+            return array_merge($vars, [self::VIEW, self::PRODUCT, self::CATEGORY, self::PAGE, self::ORDER]);
         });
+
+        CartActions::register();
 
         add_filter('template_include', static function (string $template): string {
             return self::template((string) get_query_var(self::VIEW), $template);
@@ -76,6 +82,13 @@ final class Storefront
         add_rewrite_rule('^shop/page/([0-9]+)/?$', 'index.php?' . self::VIEW . '=shop&' . self::PAGE . '=$matches[1]', 'top');
         add_rewrite_rule('^product/([^/]+)/?$', 'index.php?' . self::VIEW . '=product&' . self::PRODUCT . '=$matches[1]', 'top');
         add_rewrite_rule('^product-category/([^/]+)/?$', 'index.php?' . self::VIEW . '=category&' . self::CATEGORY . '=$matches[1]', 'top');
+        add_rewrite_rule('^cart/?$', 'index.php?' . self::VIEW . '=cart', 'top');
+        add_rewrite_rule('^checkout/?$', 'index.php?' . self::VIEW . '=checkout', 'top');
+        add_rewrite_rule(
+            '^order-received/([A-Za-z0-9-]+)/?$',
+            'index.php?' . self::VIEW . '=received&' . self::ORDER . '=$matches[1]',
+            'top'
+        );
     }
 
     public static function activate(): void
@@ -91,6 +104,9 @@ final class Storefront
         $file = match ($view) {
             'shop', 'category' => $root . 'catalog.php',
             'product' => $root . 'product.php',
+            'cart' => $root . 'cart.php',
+            'checkout' => $root . 'checkout.php',
+            'received' => $root . 'order-received.php',
             default => null,
         };
 
@@ -108,6 +124,16 @@ final class Storefront
         }
 
         if ($view === 'category' && self::currentCategory() === null) {
+            global $wp_query;
+            $wp_query->set_404();
+            status_header(404);
+            nocache_headers();
+
+            return $root . 'not-found.php';
+        }
+
+        // An order page is only readable with the order's public token.
+        if ($view === 'received' && self::currentOrder() === null) {
             global $wp_query;
             $wp_query->set_404();
             status_header(404);
@@ -150,6 +176,65 @@ final class Storefront
         return \StoreKeeper\Commerce\Core\Plugin::container()->get(CatalogView::class);
     }
 
+    /** @return array<string,mixed>|null the signed-in storefront customer */
+    public static function customer(): ?array
+    {
+        return \StoreKeeper\Commerce\Core\Plugin::container()->get(CustomerContext::class)->current();
+    }
+
+    /** @return array<string,mixed>|null */
+    public static function cartSummary(): ?array
+    {
+        return CartSession::summary();
+    }
+
+    /** @return array{shipping:list<array<string,mixed>>,payment:list<array<string,mixed>>} */
+    public static function checkoutOptions(): array
+    {
+        $checkout = \StoreKeeper\Commerce\Core\Plugin::container()->get(
+            \StoreKeeper\Commerce\Checkout\CheckoutService::class
+        );
+
+        return [
+            'shipping' => $checkout->shippingOptions(),
+            'payment' => $checkout->paymentOptions(),
+        ];
+    }
+
+    /** @return array<string,mixed>|null the order named in the URL, only with its token */
+    public static function currentOrder(): ?array
+    {
+        $number = (string) get_query_var(self::ORDER);
+        $token = isset($_GET['token']) ? sanitize_text_field(wp_unslash((string) $_GET['token'])) : '';
+
+        if ($number === '' || $token === '') {
+            return null;
+        }
+
+        return \StoreKeeper\Commerce\Core\Plugin::container()
+            ->get(\StoreKeeper\Commerce\Orders\OrderService::class)
+            ->findByPublicToken($number, $token);
+    }
+
+    /** @param array<string,mixed> $order */
+    public static function orderUrl(array $order): string
+    {
+        return add_query_arg(
+            ['token' => (string) $order['public_token']],
+            home_url('/order-received/' . rawurlencode((string) $order['number']) . '/')
+        );
+    }
+
+    public static function cartUrl(): string
+    {
+        return home_url('/cart/');
+    }
+
+    public static function checkoutUrl(): string
+    {
+        return home_url('/checkout/');
+    }
+
     public static function currentPage(): int
     {
         return max(1, (int) get_query_var(self::PAGE));
@@ -172,6 +257,13 @@ final class Storefront
             }
         } elseif ($viewName === 'shop') {
             $parts['title'] = 'Shop';
+        } elseif ($viewName === 'cart') {
+            $parts['title'] = 'Your cart';
+        } elseif ($viewName === 'checkout') {
+            $parts['title'] = 'Checkout';
+        } elseif ($viewName === 'received') {
+            $order = self::currentOrder();
+            $parts['title'] = $order === null ? 'Order' : 'Order ' . $order['number'];
         }
 
         return $parts;

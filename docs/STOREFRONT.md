@@ -12,7 +12,8 @@ shop floor.
 | Routes `/shop/`, `/shop/page/2/`, `/product/{slug}/`, `/product-category/{slug}/` | `src/Storefront/Storefront.php` |
 | Read model for grids and product pages | `src/Storefront/CatalogView.php` |
 | Product grid block + `[storekeeper_products]` shortcode | `src/Storefront/Blocks.php`, `blocks/product-grid/` |
-| Templates (shop, product, not found) | `templates/storefront/` |
+| Cart, checkout and order pages `/cart/`, `/checkout/`, `/order-received/{number}/` | `Storefront.php`, `CartSession`, `CartActions`, `Cart\CartService`, `Checkout\CheckoutService` |
+| Templates (shop, product, cart, checkout, order, not found) | `templates/storefront/` |
 | Theme | `theme/storekeeper-storefront/` |
 | Swatch interaction | `assets/storefront/product.js` |
 | Styles | `assets/storefront/storefront.css` |
@@ -35,6 +36,34 @@ sign-in (§11.5). Today it returns the row supplied through the
 - a wholesale-only product is hidden from guests and shown to wholesale groups.
 
 The filter is one line to wire when sign-in lands; no template changes.
+
+## Cart and checkout
+
+A visitor's cart is identified by a 32-byte token in the `skf_cart` cookie (only
+its SHA-256 is stored, D-026). The cart stores variant ids and quantities; the
+price, product name and availability shown on the cart page were resolved on that
+request. Adding more than the ledger holds is refused with "Only N left"; a price
+change, a tier change or a sold-out variant is visible immediately.
+
+The cart and checkout pages are ordinary forms (`admin-post.php`, nonce-checked)
+so they work without JavaScript (D-028). Checkout validates the shopper, picks the
+shipping fee (pickup is free; delivery appears only when
+`storekeeper_flat_shipping_kobo` is set), then calls `OrderService::create()` with
+`channel=web`. OrderService re-prices and reserves in one transaction, so a
+browser cannot influence the price and two shoppers cannot oversell the last
+piece.
+
+Guest checkout (D-027) does **not** attach an existing customer record: typing
+someone else's phone number cannot place an order on their account. The phone is
+kept on the order's shipping/contact JSON. Signed-in customers are attached and
+priced from their group; wholesale checkout therefore needs OTP sign-in, which is
+not built yet.
+
+A converted cart remembers its order, so a repeated submit returns the same order
+instead of charging twice. The confirmation page requires
+`?token={public_token}` and states the payment status honestly: bank transfer is
+unpaid until staff confirm it, and the bank details come from the
+`storekeeper_bank_details` option (plain text, line breaks preserved).
 
 ## Caching
 
@@ -84,8 +113,9 @@ each colour value. It is preview tooling, not part of the plugin.
 
 ## Not done yet
 
-- Cart, checkout, shipping options and payment choice.
 - Storefront sign-in (OTP), account, addresses, order tracking page.
+- Shipping zones and calculated delivery (checkout offers pickup + one flat fee).
+- Public REST endpoints for cart/checkout (D-028); the forms are the supported path.
 - Wholesale registration form.
 - Product XML sitemap and structured data.
 - Any block theme: the grid block works, but the product page route still needs a

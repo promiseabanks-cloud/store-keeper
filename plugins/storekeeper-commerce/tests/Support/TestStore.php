@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace StoreKeeper\Commerce\Tests\Support;
 
 use StoreKeeper\Commerce\Alerts\AlertService;
+use StoreKeeper\Commerce\Cart\CartRepository;
+use StoreKeeper\Commerce\Cart\CartService;
 use StoreKeeper\Commerce\Catalog\CatalogRepository;
 use StoreKeeper\Commerce\Catalog\CatalogService;
 use StoreKeeper\Commerce\Core\Audit\Actor;
@@ -14,6 +16,7 @@ use StoreKeeper\Commerce\Core\FrozenClock;
 use StoreKeeper\Commerce\Core\Hooks\InMemoryHooks;
 use StoreKeeper\Commerce\Core\Money;
 use StoreKeeper\Commerce\Core\Uuid;
+use StoreKeeper\Commerce\Checkout\CheckoutService;
 use StoreKeeper\Commerce\Customers\CustomerRepository;
 use StoreKeeper\Commerce\Customers\CustomerService;
 use StoreKeeper\Commerce\Inventory\InventoryRepository;
@@ -57,6 +60,15 @@ final class TestStore
     public OrderRepository $orderRepository;
 
     public OrderService $orders;
+
+    public CartRepository $cartRepository;
+
+    public CartService $cart;
+
+    public CheckoutService $checkout;
+
+    /** Flat delivery fee used by the test checkout; shipping tests rely on it. */
+    public int $flatShippingKobo = 150000;
 
     private function __construct(PdoConnection $db)
     {
@@ -111,6 +123,25 @@ final class TestStore
             $this->clock,
             $this->customerRepository,
             'TEST'
+        );
+
+        $this->cartRepository = new CartRepository($db, $this->clock);
+        $this->cart = new CartService(
+            $this->cartRepository,
+            $this->catalogRepository,
+            $this->pricing,
+            $this->inventoryRepository,
+            $this->clock
+        );
+        $this->checkout = new CheckoutService(
+            $this->cartRepository,
+            $this->cart,
+            $this->orders,
+            $this->customerRepository,
+            $this->clock,
+            $this->flatShippingKobo,
+            [],
+            null
         );
     }
 

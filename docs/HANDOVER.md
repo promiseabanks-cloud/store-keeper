@@ -27,8 +27,8 @@ The brief schedules six phases (§22.2–§22.7). Implemented so far:
 | §22.1 Phase 0 (discovery) | Not recorded here | Owner-facing questions live in `OPEN_QUESTIONS.md`. |
 | §22.2 Phase 1 — Foundation | **Done** | Core constants, money, phone, DB abstraction, schema + migrations, capabilities, REST conventions, WP-CLI, CI. |
 | §22.3 Phase 2 — Back office | **Done** | Catalog, pricing resolution, stock ledger with reservations, orders, customers, back-office app shell and its read/write APIs. |
-| §22.4 Phase 3 — Orders, payments, notifications | **Payments done, the rest not** | Paystack, Flutterwave and OPay adapters, payment links and signed webhooks are shipped (OPay cannot go live without the merchant ID, Q-001b; no real charge has ever been made). **Not built:** hold-expiry job, shipping zones/methods, shipments and public tracking, status bulk actions, the notification template system, WhatsApp/SMS adapters, message log and merchant alerts delivery. |
-| §22.5 Phase 4 — Storefront | **Partially done (first increment)** | Theme, `/shop/`, categories, search, product page with swatches and group pricing, block + shortcode, OG/canonical. **Not built:** cart, checkout, OTP sign-in, account, addresses, tracking page styling, wholesale registration, product sitemap. |
+| §22.4 Phase 3 — Orders, payments, notifications | **Payments + hold expiry done, the rest not** | Paystack, Flutterwave and OPay adapters, payment links and signed webhooks are shipped (OPay cannot go live without the merchant ID, Q-001b; no real charge has ever been made). Hold expiry now runs hourly and via `wp storekeeper orders expire-holds`. **Not built:** shipping zones/methods, shipments and public tracking, status bulk actions, the notification template system, WhatsApp/SMS adapters, message log and merchant alerts delivery. |
+| §22.5 Phase 4 — Storefront | **Partially done (catalogue + cart + checkout)** | Theme, `/shop/`, categories, search, product page with swatches and group pricing, block + shortcode, OG/canonical. Cart (`/cart/`), guest/retail checkout (`/checkout/`) and the token-protected order page (`/order-received/{number}/`) are shipped. **Not built:** OTP sign-in, account, addresses in the browser, tracking page styling, wholesale registration, product sitemap. |
 | §22.6 Phase 5 — POS + offline sync | **Not started** | Only the tables exist. |
 | §22.7 Phase 6 — Platform layer | **Not started** | `plugins/storekeeper-platform` is a plugin header and nothing else. |
 
@@ -41,9 +41,8 @@ quote the brief section number.
 Commit trail (oldest first relevant): `a1129bc` core → `71f82b5` WP integration →
 `312ea3e` engine → `ef58166` back-office shell + OPay + preview → `c5d38de` orders
 → `1bf2be8` gateways → `22ed483` customers/prices/locations/staff/alerts →
-`2b2e9e8` back-office redesign → `63acd0a` storefront.
-
-Working tree is clean at `63acd0a`.
+`2b2e9e8` back-office redesign → `63acd0a` storefront → `e8d87df` handover docs
+→ cart, checkout and hold expiry (this increment).
 
 ## 3. Intent — how the work is being run
 
@@ -128,8 +127,9 @@ service.
    If you add a new state change that affects the shop, add its hook to
    `Storefront::register()`.
 9. **Storefront routes are rewrite rules** (`sk_view`, `sk_product`,
-   `sk_category`, `sk_page`). After deploying, `wp rewrite flush` is required once
-   (activation already flushes). `redirect_canonical` is disabled for these routes.
+   `sk_category`, `sk_page`, `sk_order`). After deploying, `wp rewrite flush` is
+   required once (activation already flushes). `redirect_canonical` is disabled for
+   these routes.
 10. **The storefront theme must be activated** and must find the plugin active;
     `theme/storekeeper-storefront` calls the plugin's `Storefront::view()`.
 11. **wp-admin chrome is hidden only on the Store Keeper screen.** Everything is
@@ -147,6 +147,14 @@ service.
     `docs/PREVIEW.md`.
 15. **No product decisions in code**: gateway credentials, plan prices, product
     name, provider choices are placeholders or settings, never hard-coded values.
+16. **The cart stores choices, not money.** `CartService::summary()` re-resolves
+    every line through `PricingService` and reads availability from the ledger on
+    every request; never add a `price_kobo` column to `cart_items` and never trust
+    a posted variant price.
+17. **Checkout composes, it does not compute.** `CheckoutService` validates the
+    shopper and picks the shipping fee, then calls `OrderService::create()` — which
+    re-prices and reserves in one transaction. Guest orders are deliberately not
+    attached to an existing customer record (D-027).
 
 ## 6. Running things
 
@@ -198,8 +206,9 @@ shoppers are not WP users); the seed is not idempotent for locations.
 - **No storefront sign-in.** `Storefront/CustomerContext` reads a customer from the
   `storekeeper/storefront/customer` filter and otherwise returns null (guest). The
   pricing path is real and tested (guest vs wholesale), but a visitor cannot yet
-  become a wholesale customer in the browser.
-- **No cart or checkout.** The product page has no add-to-cart button on purpose.
+  become a wholesale customer in the browser, so wholesale checkout is not usable.
+- **Cart and checkout are server-rendered form posts, not REST** (D-028). Guests
+  have no REST identity, and a public write API needs rate limiting first.
 - **Staff screen is read-only** (D-021); people are created on the WP Users screen.
 - **Virtual accounts, refunds and reconciliation are deferred** (D-019).
 - **Back-office alerts** are read-only panes; there is no notification delivery.
@@ -217,34 +226,33 @@ shoppers are not WP users); the seed is not idempotent for locations.
 | Q-004 | Pilot merchant(s) | The storefront gate ("pilot's website live on the same stock") needs one. |
 | Q-005 | WhatsApp route (Cloud API direct or BSP) | Blocks notifications and the WhatsApp order desk. |
 | Q-008 | Legal pages | The storefront has no privacy/terms template yet. |
+| Q-012 | Guest checkout allowed? | Shipped as yes for retail; confirm before launch. |
+| Q-013 | Launch delivery: pickup + one flat fee? | Checkout offers pickup, plus delivery only when `storekeeper_flat_shipping_kobo` is set. |
+| Q-014 | Hold policy: 30 min gateway / 24 h transfer? | Implemented as the brief states; expiry now cancels automatically. |
 
 ## 9. Recommended next step
 
-Continue §22.5 with **cart and checkout**, then OTP sign-in, in that order.
+Continue §22.5 with **OTP sign-in and the account area**, then §22.4 notifications
+(needed for OTP delivery).
 
 Suggested shape, consistent with what exists:
 
-- Server-side cart keyed by a storefront session token (cookie), stored in a
-  `{p}carts` table or a JSON option per session; the cart stores variant ids and
-  quantities only — never prices.
-- Re-price on every read with `PricingService::quote()` so a cart cannot hold a
-  stale or group-wrong price; block `min_order_value_kobo` from the customer's
-  group at checkout (staff override in quick order only, §11.5).
-- Checkout calls `OrderService::create()` with the session customer, then
-  `POST /orders/{uuid}/payment-link` for the chosen gateway; show bank-transfer
-  instructions with the order number for the transfer path.
-- Endpoints already promised in `docs/API.md` §18: `GET/POST/PATCH /cart`,
-  `POST /checkout/shipping-options`, `POST /checkout`.
-- Shipping zones/methods do not exist yet; until §22.4 lands, checkout can offer
-  pickup and a flat store-wide delivery fee from settings rather than inventing
-  zone data.
-- Keep every new template working without JavaScript and keep swatches as links;
-  the storefront's current contract is "server-rendered first, JS only shortens the
-  wait".
+- `{p}customer_sessions` and `{p}otp_codes` already exist; build the service that
+  issues a 6-digit code, hashes it, enforces 10-minute expiry / 5 attempts / 5 per
+  phone per hour / 20 per IP per hour, and issues the 32-byte session cookie
+  (90-day sliding expiry, "sign out of all devices").
+- OTP delivery needs `src/Notifications` and the adapters from §22.4 (Q-005/Q-006).
+  Until then, the session seam is `Storefront\CustomerContext`; set it from the
+  session cookie in `Storefront::register()`.
+- Once a customer can sign in: merge the guest cart into their active cart on
+  login, wire the address book (`CustomerService::addAddress` exists), order
+  history (`OrderRepository::list` filtered by customer), and wholesale
+  registration with the approval queue that already exists.
+- Then the public tracking page (`OrderService::findByPublicToken` already returns
+  the order) and the notifications that go with status changes.
 
-After checkout, the storefront needs `POST /auth/otp/request|verify`, `GET /me`,
-addresses, `GET /me/orders` and the public tracking page, all of which depend on the
-notification adapters in §22.4 for OTP delivery.
+After that, §22.4's remaining fulfilment work: shipping zones/methods, shipments,
+bulk status actions, and the message log.
 
 ## 10. Document index
 
