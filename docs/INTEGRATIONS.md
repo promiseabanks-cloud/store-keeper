@@ -6,23 +6,25 @@ missing; each one already has a seam, so connecting it is configuration plus one
 adapter, not a redesign. Never commit a credential: store values as site options
 (set in the back office or with `wp option update`) or environment variables.
 
-## 1. OTP delivery — WhatsApp, falling back to SMS (Q-016)
+## 1. OTP delivery — email now, WhatsApp/SMS later (Q-016)
 
 **Affects:** storefront sign-in (`/sign-in/`) and sign-up (`/register/`).
 
-**Now:** `Storefront\Otp\LogOtpSender` writes the code to the PHP error log and
-shows it on a preview screen when both switches in `PREVIEW.md` are on. No
-message reaches a shopper.
+**Now:** `Storefront\Otp\EmailOtpSender` emails the 6-digit code through the
+`email` channel (`wp_mail`) to the address on the customer's record, and the
+sign-up form asks for one. With no address, a mail transport that refuses the
+message, or a host whose `notification_transport` is `log` (the preview),
+`LogOtpSender` writes the code to the PHP error log and shows it on the preview
+screen when both switches in `PREVIEW.md` are on (D-036).
 
-**Seam:** implement `Storefront\Otp\OtpSender` (`send(string $phoneE164, string
-$code, string $purpose): void`) for the chosen provider and bind it in
-`Core\Plugin` where `OtpSender::class` is registered. `purpose` is `login` or
-`register`; a WhatsApp authentication template needs one approved template per
-purpose.
+**Needed from the owner:** nothing for the code path itself, but a live store
+needs a working mail transport and a From address — see section 2 and Q-017.
 
-**Needed from the owner:** provider (Meta WhatsApp Cloud API direct, or a
-provider such as Twilio/360dialog), sender number / WABA ID, template names, and
-whether SMS fallback is wanted and through whom. Questions Q-005, Q-006, Q-016.
+**Seam:** a WhatsApp or SMS adapter implements `Storefront\Otp\OtpSender`
+(`send(string $phoneE164, string $code, string $purpose, ?string $email)`) and is
+bound in `Core\Plugin` where `OtpSender::class` is registered. `purpose` is
+`login` or `register`; a WhatsApp authentication template needs one approved
+template per purpose. Questions Q-005, Q-006, Q-016.
 
 ## 2. Transactional email sender (Q-017)
 

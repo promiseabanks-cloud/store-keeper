@@ -53,12 +53,22 @@ final class AuthActions
         }
 
         $challenge = bin2hex(random_bytes(16));
-        set_transient(self::CHALLENGE_KEY . hash('sha256', $challenge), $result['phone'], self::codeTtl());
+        set_transient(
+            self::CHALLENGE_KEY . hash('sha256', $challenge),
+            ['phone' => $result['phone'], 'email' => $result['email'], 'channel' => $result['channel']],
+            self::codeTtl()
+        );
         self::setChallengeCookie($challenge);
 
-        CartSession::flash($result['sent']
-            ? 'We sent a 6-digit code to ' . self::mask($result['phone']) . '.'
-            : 'If that number has an account, a code is on its way.');
+        if (!$result['sent']) {
+            $flash = 'If that number has an account, a code is on its way.';
+        } elseif ($result['channel'] === 'email' && is_string($result['email']) && $result['email'] !== '') {
+            $flash = 'We emailed a 6-digit code to ' . self::maskEmail($result['email']) . '.';
+        } else {
+            $flash = 'We could not email a code to you. Ask the shop to check the email on your account.';
+        }
+
+        CartSession::flash($flash);
 
         self::redirect(home_url('/sign-in/'));
     }
@@ -130,15 +140,56 @@ final class AuthActions
     /** The phone number behind this browser's pending challenge, if still valid. */
     public static function challengedPhone(): ?string
     {
+        $pending = self::pendingChallenge();
+
+        return $pending === null ? null : (string) $pending['phone'];
+    }
+
+    /** The address the pending code was emailed to, when the customer has one. */
+    public static function challengedEmail(): ?string
+    {
+        $pending = self::pendingChallenge();
+        $email = $pending === null ? null : $pending['email'];
+
+        return is_string($email) && $email !== '' ? $email : null;
+    }
+
+    /** Where the pending code actually went: `email` or `log`. */
+    public static function challengedChannel(): string
+    {
+        $pending = self::pendingChallenge();
+
+        return $pending === null ? 'log' : $pending['channel'];
+    }
+
+    /**
+     * The challenge row lives server-side under a random cookie, never in the URL.
+     *
+     * @return array{phone:string,email:?string,channel:string}|null
+     */
+    private static function pendingChallenge(): ?array
+    {
         $challenge = $_COOKIE[self::CHALLENGE_COOKIE] ?? null;
 
         if (!is_string($challenge) || preg_match('/^[a-f0-9]{32}$/', $challenge) !== 1) {
             return null;
         }
 
-        $phone = get_transient(self::CHALLENGE_KEY . hash('sha256', $challenge));
+        $pending = get_transient(self::CHALLENGE_KEY . hash('sha256', $challenge));
 
-        return is_string($phone) && $phone !== '' ? $phone : null;
+        // A challenge written before the address was kept is still a phone only.
+        if (is_string($pending) && $pending !== '') {
+            return ['phone' => $pending, 'email' => null, 'channel' => 'log'];
+        }
+
+        if (!is_array($pending) || !isset($pending['phone']) || !is_string($pending['phone'])) {
+            return null;
+        }
+
+        $email = isset($pending['email']) && is_string($pending['email']) ? $pending['email'] : null;
+        $channel = isset($pending['channel']) && $pending['channel'] === 'email' ? 'email' : 'log';
+
+        return ['phone' => $pending['phone'], 'email' => $email, 'channel' => $channel];
     }
 
     public static function mask(string $phoneE164): string
@@ -146,6 +197,18 @@ final class AuthActions
         return strlen($phoneE164) < 7
             ? $phoneE164
             : substr($phoneE164, 0, 4) . str_repeat('•', 3) . substr($phoneE164, -4);
+    }
+
+    /** `chidi@example.com` becomes `c•••@example.com`, enough to recognise. */
+    public static function maskEmail(string $email): string
+    {
+        $parts = explode('@', $email, 2);
+
+        if (count($parts) !== 2 || $parts[0] === '' || $parts[1] === '') {
+            return $email;
+        }
+
+        return mb_substr($parts[0], 0, 1) . str_repeat('•', 3) . '@' . $parts[1];
     }
 
     private static function clearChallenge(): void

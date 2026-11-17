@@ -50,7 +50,7 @@ final class StorefrontRegistration
      * Validate a sign-up form before a code is sent.
      *
      * @param array<string,mixed> $input
-     * @return array{name:string,group_id:int,business_name:?string,email:?string}
+     * @return array{name:string,group_id:int,business_name:?string,email:string}
      */
     public function validate(array $input): array
     {
@@ -84,7 +84,15 @@ final class StorefrontRegistration
         }
 
         $email = trim((string) ($input['email'] ?? ''));
-        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+
+        if ($email === '') {
+            throw new ValidationFailed(
+                'Tell us your email address: your sign-in code is emailed there.',
+                ['email' => 'Required.']
+            );
+        }
+
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             throw new ValidationFailed('That email address does not look right.', ['email' => 'Use name@example.com.']);
         }
 
@@ -92,14 +100,14 @@ final class StorefrontRegistration
             'name' => $name,
             'group_id' => $groupId,
             'business_name' => $business === '' ? null : $business,
-            'email' => $email === '' ? null : strtolower($email),
+            'email' => strtolower($email),
         ];
     }
 
     /**
      * Create the customer once the phone number is confirmed.
      *
-     * @param array{name:string,group_id:int,business_name:?string,email:?string} $clean
+     * @param array{name:string,group_id:int,business_name:?string,email:string} $clean
      * @return array<string,mixed>
      */
     public function register(array $clean, string $phone): array

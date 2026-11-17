@@ -6,22 +6,18 @@
  * The pending number lives in a 10-minute HTTP-only cookie, never in the URL.
  */
 
-use StoreKeeper\Commerce\Core\Plugin;
 use StoreKeeper\Commerce\Storefront\AuthActions;
 use StoreKeeper\Commerce\Storefront\CartSession;
 use StoreKeeper\Commerce\Storefront\Storefront;
 use StoreKeeper\Commerce\Storefront\Otp\LogOtpSender;
-use StoreKeeper\Commerce\Storefront\Otp\OtpSender;
 
 $customer = Storefront::customer();
 $pendingPhone = $customer === null ? AuthActions::challengedPhone() : null;
+$pendingEmail = $customer === null ? AuthActions::challengedEmail() : null;
+$pendingChannel = $customer === null ? AuthActions::challengedChannel() : 'log';
 $flash = CartSession::takeFlash();
 
-$previewCode = null;
-if ($pendingPhone !== null) {
-    $sender = Plugin::container()->get(OtpSender::class);
-    $previewCode = $sender instanceof LogOtpSender ? $sender->previewCode($pendingPhone) : null;
-}
+$previewCode = $pendingPhone === null ? null : LogOtpSender::previewCode($pendingPhone);
 
 get_header();
 ?>
@@ -62,8 +58,13 @@ get_header();
         <section class="skf-panel">
             <h2 class="skf-panel__title">Enter the code</h2>
             <p class="skf-field__hint">
-                We sent a 6-digit code to <?php echo esc_html(AuthActions::mask($pendingPhone)); ?>.
-                It expires in 10 minutes.
+                <?php if ($pendingChannel === 'email' && $pendingEmail !== null) : ?>
+                    We emailed a 6-digit code to <?php echo esc_html(AuthActions::maskEmail($pendingEmail)); ?>.
+                    It expires in 10 minutes. Not there? Check your spam folder.
+                <?php else : ?>
+                    We could not email a code to you. Ask the shop to check the email
+                    address on your account, then start again.
+                <?php endif; ?>
             </p>
 
             <?php if ($previewCode !== null) : ?>
@@ -107,8 +108,9 @@ get_header();
         <section class="skf-panel">
             <h2 class="skf-panel__title">Sign in with your phone</h2>
             <p class="skf-field__hint">
-                Wholesale customers sign in to see their own prices. We will text a
-                6-digit code to the number the shop has on file.
+                Wholesale customers sign in to see their own prices. We will email a
+                6-digit code to the address the shop has on file. If the shop has no
+                address for you, ask them to add one.
             </p>
 
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">

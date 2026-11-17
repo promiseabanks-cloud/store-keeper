@@ -35,9 +35,10 @@ Storefront routes: `/ladies-corner/sign-in/`, `/ladies-corner/cart/`,
 
 ### Trying sign-in
 
-No SMS or WhatsApp provider is wired yet (Q-016). The preview can show the code on
-screen, but only when **both** switches are on, so it cannot happen by accident on
-a live site:
+The code is emailed on a live store (D-036), but a preview host has no mail server,
+so it runs the `log` transport: the code goes to the PHP error log and the page can
+show it on screen, but only when **both** switches are on, so it cannot happen by
+accident on a live site:
 
 ```bash
 wp --url=https://<preview-host>/ladies-corner option update storekeeper_otp_show_code 1
@@ -45,10 +46,11 @@ wp --url=https://<preview-host>/ladies-corner option update storekeeper_otp_show
 ```
 
 Sign in at `/ladies-corner/sign-in/` with the seeded customer's number,
-`0803 123 4567`; the code appears in a “Preview only” notice above the form, and
+`0803 123 4567` (whose email is `ada@example.test`); the code appears in a “Preview only” notice above the form, and
 the pages then show wholesale prices (₦6,200 for the gold hoops instead of ₦8,500).
 Turn the option off (`option delete storekeeper_otp_show_code`) to see the
-production behaviour, where the code reaches only the PHP error log.
+production behaviour, where the code reaches only the PHP error log (or, on a live
+store with the `email` transport, the customer's inbox).
 
 ### Trying sign-up
 

@@ -5,26 +5,34 @@ declare(strict_types=1);
 namespace StoreKeeper\Commerce\Storefront\Otp;
 
 /**
- * The placeholder sender used until a WhatsApp/SMS provider is chosen
- * (Q-005, Q-006). It writes the code to the PHP error log so an operator can
- * complete a sign-in while testing, and keeps the last code in a short-lived
- * transient so a preview install can show it on screen.
+ * The fallback sender: no message leaves the server, the code goes to the PHP
+ * error log so an operator can complete a sign-in while testing. It is used
+ * when a customer has no email on file, when the mail transport refuses a
+ * message, and by a preview host whose store option selects the `log`
+ * transport.
  *
- * It is **not** a delivery channel for real shoppers: no message leaves the
- * server. That is why the sign-in page tells the shopper to ask the shop if no
- * code arrives.
+ * It keeps the last code in a short-lived transient so a preview install can
+ * show it on screen. That is not a delivery channel for real shoppers.
  */
 final class LogOtpSender implements OtpSender
 {
     public const PREVIEW_TRANSIENT = 'storekeeper_otp_preview_';
 
-    public function send(string $phoneE164, string $code, string $purpose): void
+    public function send(string $phoneE164, string $code, string $purpose, ?string $email = null): string
     {
-        error_log(sprintf('[Store Keeper] OTP (%s) for %s: %s', $purpose, $phoneE164, $code));
+        error_log(sprintf(
+            '[Store Keeper] OTP (%s) for %s%s: %s',
+            $purpose,
+            $phoneE164,
+            $email === null || $email === '' ? '' : ' <' . $email . '>',
+            $code
+        ));
 
         if (function_exists('set_transient')) {
             set_transient(self::PREVIEW_TRANSIENT . hash('sha256', $phoneE164), $code, 10 * MINUTE_IN_SECONDS);
         }
+
+        return 'log';
     }
 
     /**
@@ -34,7 +42,7 @@ final class LogOtpSender implements OtpSender
      * option — because showing a code on screen hands anyone who can type a
      * phone number that account's session. Never enable it in production.
      */
-    public function previewCode(string $phoneE164): ?string
+    public static function previewCode(string $phoneE164): ?string
     {
         if (!defined('WP_DEBUG') || !WP_DEBUG || !function_exists('get_option')) {
             return null;

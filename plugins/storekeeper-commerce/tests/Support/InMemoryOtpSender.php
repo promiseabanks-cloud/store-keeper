@@ -12,12 +12,27 @@ use StoreKeeper\Commerce\Storefront\Otp\OtpSender;
  */
 final class InMemoryOtpSender implements OtpSender
 {
-    /** @var list<array{phone:string,code:string,purpose:string}> */
+    /** @var list<array{phone:string,code:string,purpose:string,email:?string}> */
     public array $sent = [];
 
-    public function send(string $phoneE164, string $code, string $purpose): void
+    public function send(string $phoneE164, string $code, string $purpose, ?string $email = null): string
     {
-        $this->sent[] = ['phone' => $phoneE164, 'code' => $code, 'purpose' => $purpose];
+        $this->sent[] = ['phone' => $phoneE164, 'code' => $code, 'purpose' => $purpose, 'email' => $email];
+
+        return $email === null || $email === '' ? 'log' : 'email';
+    }
+
+    public function lastEmail(string $phoneE164): ?string
+    {
+        $email = null;
+
+        foreach ($this->sent as $message) {
+            if ($message['phone'] === $phoneE164) {
+                $email = $message['email'];
+            }
+        }
+
+        return $email;
     }
 
     public function lastCode(string $phoneE164): ?string

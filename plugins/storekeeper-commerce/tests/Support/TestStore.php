@@ -284,7 +284,7 @@ final class TestStore
     }
 
     /** @return array<string,mixed> */
-    public function wholesaleCustomer(string $phone = '08031234567'): array
+    public function wholesaleCustomer(string $phone = '08031234567', ?string $email = 'ada@example.test'): array
     {
         $group = $this->groupNamed('Wholesale');
 
@@ -292,6 +292,7 @@ final class TestStore
             'name' => 'Ada Wholesale',
             'business_name' => 'Ada Fabrics',
             'phone' => $phone,
+            'email' => $email,
             'group_id' => $group['id'],
         ], $this->actor(), 'storefront');
     }

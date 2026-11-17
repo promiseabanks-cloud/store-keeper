@@ -46,19 +46,27 @@ final class AccountActions
 
         try {
             $clean = $registration->validate($_POST);
-            $phone = Plugin::container()
+            $requested = Plugin::container()
                 ->get(StorefrontAuth::class)
-                ->requestRegistration((string) ($_POST['phone'] ?? ''), self::ip());
+                ->requestRegistration((string) ($_POST['phone'] ?? ''), self::ip(), $clean['email']);
         } catch (StoreKeeperException $error) {
             CartSession::flash($error->getMessage());
             self::redirect(home_url('/register/'));
         }
 
+        $phone = $requested['phone'];
         $challenge = bin2hex(random_bytes(16));
-        set_transient(self::SIGNUP_KEY . hash('sha256', $challenge), ['phone' => $phone, 'data' => $clean], 600);
+        set_transient(self::SIGNUP_KEY . hash('sha256', $challenge), [
+            'phone' => $phone,
+            'data' => $clean,
+            'channel' => $requested['channel'],
+        ], 600);
         self::setSignupCookie($challenge);
 
-        CartSession::flash('We sent a 6-digit code to ' . AuthActions::mask($phone) . '.');
+        CartSession::flash($requested['channel'] === 'email'
+            ? 'We emailed a 6-digit code to ' . AuthActions::maskEmail($clean['email'])
+                . '. Confirm it to finish your account.'
+            : 'We could not email a code. Ask the shop to check its email settings.');
 
         self::redirect(home_url('/register/'));
     }

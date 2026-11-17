@@ -43,6 +43,7 @@ use StoreKeeper\Commerce\Storefront\CustomerContext;
 use StoreKeeper\Commerce\Storefront\StorefrontAccount;
 use StoreKeeper\Commerce\Storefront\StorefrontRegistration;
 use StoreKeeper\Commerce\Storefront\CustomerSession;
+use StoreKeeper\Commerce\Storefront\Otp\EmailOtpSender;
 use StoreKeeper\Commerce\Storefront\Otp\LogOtpSender;
 use StoreKeeper\Commerce\Storefront\Otp\OtpSender;
 use StoreKeeper\Commerce\Storefront\Storefront;
@@ -204,10 +205,18 @@ final class Plugin
         $container->singleton(CustomerSessionRepository::class, static fn (Container $c): CustomerSessionRepository => new CustomerSessionRepository(
             $c->get(Connection::class)
         ));
-        $container->singleton(OtpSender::class, static function (): OtpSender {
-            $sender = apply_filters(Brand::hook('otp/sender'), new LogOtpSender());
+        $container->singleton(OtpSender::class, static function (Container $c): OtpSender {
+            // A preview host has no mail server, so `log` (the same switch the
+            // order emails read) keeps the code on screen instead of handing it
+            // to a transport that cannot deliver.
+            $transport = (string) get_option(Brand::OPTION_PREFIX . 'notification_transport', 'email');
+            $sender = $transport === 'log'
+                ? new LogOtpSender()
+                : new EmailOtpSender(new EmailChannel(), new LogOtpSender());
 
-            return $sender instanceof OtpSender ? $sender : new LogOtpSender();
+            $filtered = apply_filters(Brand::hook('otp/sender'), $sender);
+
+            return $filtered instanceof OtpSender ? $filtered : $sender;
         });
         $container->singleton(StorefrontAuth::class, static fn (Container $c): StorefrontAuth => new StorefrontAuth(
             $c->get(OtpRepository::class),

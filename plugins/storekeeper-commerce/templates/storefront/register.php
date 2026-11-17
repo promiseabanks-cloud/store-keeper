@@ -12,7 +12,6 @@ use StoreKeeper\Commerce\Storefront\AccountActions;
 use StoreKeeper\Commerce\Storefront\AuthActions;
 use StoreKeeper\Commerce\Storefront\CartSession;
 use StoreKeeper\Commerce\Storefront\Otp\LogOtpSender;
-use StoreKeeper\Commerce\Storefront\Otp\OtpSender;
 use StoreKeeper\Commerce\Storefront\Storefront;
 use StoreKeeper\Commerce\Storefront\StorefrontRegistration;
 
@@ -20,12 +19,12 @@ $customer = Storefront::customer();
 $pending = $customer === null ? AccountActions::pendingSignup() : null;
 $flash = CartSession::takeFlash();
 $options = Plugin::container()->get(StorefrontRegistration::class)->options();
+$pendingEmail = $pending !== null && isset($pending['data']['email'])
+    ? (string) $pending['data']['email']
+    : null;
+$pendingChannel = $pending !== null && isset($pending['channel']) ? (string) $pending['channel'] : 'log';
 
-$previewCode = null;
-if ($pending !== null) {
-    $sender = Plugin::container()->get(OtpSender::class);
-    $previewCode = $sender instanceof LogOtpSender ? $sender->previewCode((string) $pending['phone']) : null;
-}
+$previewCode = $pending === null ? null : LogOtpSender::previewCode((string) $pending['phone']);
 
 get_header();
 ?>
@@ -58,7 +57,11 @@ get_header();
         <section class="skf-panel">
             <h2 class="skf-panel__title">Enter the code</h2>
             <p class="skf-field__hint">
-                We sent a 6-digit code to <?php echo esc_html(AuthActions::mask((string) $pending['phone'])); ?>.
+                <?php if ($pendingChannel === 'email' && $pendingEmail !== null) : ?>
+                    We emailed a 6-digit code to <?php echo esc_html(AuthActions::maskEmail($pendingEmail)); ?>.
+                <?php else : ?>
+                    We could not email a code to you. Ask the shop to check its email settings.
+                <?php endif; ?>
                 Your account is created once the code is confirmed.
             </p>
 
@@ -117,7 +120,7 @@ get_header();
                         placeholder="0803 123 4567"
                         required
                     >
-                    <p class="skf-field__hint">We text a 6-digit code to this number to confirm it.</p>
+                    <p class="skf-field__hint">Your sign-in code goes to your email; we keep this number for delivery.</p>
                 </div>
 
                 <fieldset class="skf-field skf-field--choice">
@@ -157,9 +160,9 @@ get_header();
                 </div>
 
                 <div class="skf-field">
-                    <label for="skf-email">Email (optional)</label>
-                    <input id="skf-email" type="email" name="email" autocomplete="email" placeholder="you@example.com">
-                    <p class="skf-field__hint">Where your order confirmations go.</p>
+                    <label for="skf-email">Email address</label>
+                    <input id="skf-email" type="email" name="email" autocomplete="email" placeholder="you@example.com" required>
+                    <p class="skf-field__hint">We email your 6-digit code here, and your order confirmations.</p>
                 </div>
 
                 <button class="skf-button" type="submit" <?php disabled($options === []); ?>>Send me a code</button>

@@ -105,9 +105,14 @@ is involved.
 - Only the SHA-256 of the session token is stored in `{p}customer_sessions`; the
   session lives 90 days and slides forward once it has less than 30 left.
 - The code is stored as a bcrypt hash, expires after 10 minutes and is single-use.
-- No provider is wired yet (Q-016): `LogOtpSender` writes the code to the PHP error
-  log, and the preview can display it when `WP_DEBUG` and `storekeeper_otp_show_code`
-  are both on. The sign-in page never claims an SMS or WhatsApp message was sent.
+- The code is delivered by email through `EmailOtpSender` (D-036) to the address
+  on the customer's record; the request response carries that address so the page
+  can say where the code went. With no address on file, or a mail transport that
+  refuses the message, `LogOtpSender` writes it to the PHP error log, and the
+  preview can display it when `WP_DEBUG` and `storekeeper_otp_show_code` are both
+  on. The page never claims an email was sent when it was not.
+- Sign-up requires an email address for the same reason, and `otp_codes.channel`
+  records `email` when one was used.
 - A signed-in customer's group prices apply to the shop, the cart and checkout; the
   order records `customer_id` and the group used at order time.
 

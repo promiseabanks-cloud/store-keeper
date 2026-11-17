@@ -50,7 +50,11 @@ final class StorefrontAuth
      * An unknown phone number gets the same answer as a known one: asking the
      * shop to reveal which numbers have accounts is not part of sign-in.
      *
-     * @return array{phone:string, sent:bool}
+     * `email` is the address the code was addressed to, when the customer has
+     * one on file, and `channel` where it actually went; the caller uses those to
+     * say where the code went, never whether the number is registered.
+     *
+     * @return array{phone:string, sent:bool, email:?string, channel:string}
      */
     public function request(string $phoneInput, ?string $ip = null): array
     {
@@ -61,12 +65,13 @@ final class StorefrontAuth
         $customer = $this->customers->customerByPhone($phone);
 
         if ($customer === null || ($customer['approval_status'] ?? 'approved') === 'rejected') {
-            return ['phone' => $phone, 'sent' => false];
+            return ['phone' => $phone, 'sent' => false, 'email' => null, 'channel' => 'log'];
         }
 
-        $this->issue($phone, 'login', $ip);
+        $email = $this->emailOf($customer);
+        $channel = $this->issue($phone, 'login', $ip, $email);
 
-        return ['phone' => $phone, 'sent' => true];
+        return ['phone' => $phone, 'sent' => true, 'email' => $email, 'channel' => $channel];
     }
 
     /**
@@ -75,7 +80,8 @@ final class StorefrontAuth
      * The customer row is only created after this code is confirmed, so a mistyped
      * or invented number never becomes a customer.
      */
-    public function requestRegistration(string $phoneInput, ?string $ip = null): string
+    /** @return array{phone:string, channel:string} */
+    public function requestRegistration(string $phoneInput, ?string $ip = null, ?string $email = null): array
     {
         $phone = $this->phone($phoneInput);
 
@@ -87,9 +93,8 @@ final class StorefrontAuth
         }
 
         $this->assertWithinLimits($phone, $ip);
-        $this->issue($phone, 'register', $ip);
 
-        return $phone;
+        return ['phone' => $phone, 'channel' => $this->issue($phone, 'register', $ip, $email)];
     }
 
     /** Confirm a sign-up code; the caller then creates the customer. */
@@ -201,14 +206,14 @@ final class StorefrontAuth
     }
 
     /** Store a one-time code and hand it to the sender. */
-    private function issue(string $phone, string $purpose, ?string $ip): void
+    private function issue(string $phone, string $purpose, ?string $ip, ?string $email = null): string
     {
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
         $this->otp->create([
             'phone_e164' => $phone,
             'code_hash' => password_hash($code, PASSWORD_BCRYPT),
-            'channel' => 'sms',
+            'channel' => $email === null || $email === '' ? 'sms' : 'email',
             'purpose' => $purpose,
             'attempts' => 0,
             'expires_at' => $this->nowPlusMinutes(self::CODE_TTL_MINUTES),
@@ -217,7 +222,15 @@ final class StorefrontAuth
             'ip' => $ip,
         ]);
 
-        $this->sender->send($phone, $code, $purpose);
+        return $this->sender->send($phone, $code, $purpose, $email);
+    }
+
+    /** The customer's own address, when it is a usable one. */
+    private function emailOf(array $customer): ?string
+    {
+        $email = isset($customer['email']) ? trim((string) $customer['email']) : '';
+
+        return $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) !== false ? $email : null;
     }
 
     /** Check and consume the latest code for one purpose, or say why not. */

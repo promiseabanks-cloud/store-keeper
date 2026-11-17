@@ -56,10 +56,12 @@ wholesale customer sees wholesale prices immediately. Checkout attaches
 A cart picked up while signed out is attached to the customer at sign-in; an active
 cart from another device is folded in, capped at available stock (D-031).
 
-> **Delivery is not wired yet.** Q-005 (WhatsApp route) and Q-006 (SMS provider)
-> are unanswered, so `LogOtpSender` writes the code to the PHP error log. The
-> preview shows it on screen when `WP_DEBUG` and `storekeeper_otp_show_code` are
-> both on; never enable that option in production (D-030).
+> **The code is emailed.** `EmailOtpSender` sends it through the `email` channel
+> to the address on the customer's record (D-036), which sign-up now requires.
+> With no address, or a mail transport that refuses the message, `LogOtpSender`
+> writes the code to the PHP error log; the preview shows it on screen when
+> `WP_DEBUG` and `storekeeper_otp_show_code` are both on, and never in production
+> (D-030). A live store needs working mail and a From address (Q-017).
 
 Not built in this increment: wholesale registration from the storefront (staff
 create customers, and the approval queue already exists), account order history,

@@ -46,9 +46,10 @@ final class StorefrontAccountTest extends TestCase
             'phone' => '08031234567',
             'group_id' => $wholesale['id'],
             'business_name' => 'Ada Fabrics',
+            'email' => 'ada@example.test',
         ]);
 
-        $phone = $this->store->auth->requestRegistration('08031234567');
+        $phone = $this->store->auth->requestRegistration('08031234567', null, 'ada@example.test')['phone'];
         $code = (string) $this->store->otpSender->lastCode($phone);
 
         self::assertSame($phone, $this->store->auth->verifyRegistration($phone, $code));
@@ -76,9 +77,10 @@ final class StorefrontAccountTest extends TestCase
             'name' => 'Bola Trade',
             'group_id' => $wholesale['id'],
             'business_name' => 'Bola Stores',
+            'email' => 'bola@example.test',
         ]);
 
-        $phone = $this->store->auth->requestRegistration('08035550000');
+        $phone = $this->store->auth->requestRegistration('08035550000', null, 'bola@example.test')['phone'];
         $code = (string) $this->store->otpSender->lastCode($phone);
         $this->store->auth->verifyRegistration($phone, $code);
 
@@ -96,7 +98,7 @@ final class StorefrontAccountTest extends TestCase
         $this->expectException(ValidationFailed::class);
         $this->expectExceptionMessage('already registered');
 
-        $this->store->auth->requestRegistration('0803 123 4567');
+        $this->store->auth->requestRegistration('0803 123 4567', null, 'ada@example.test');
     }
 
     public function testWholesaleSignUpRequiresABusinessName(): void
@@ -120,10 +122,25 @@ final class StorefrontAccountTest extends TestCase
             'name' => 'Ada Retail',
             'group_id' => $retail['id'],
             'business_name' => '',
+            'email' => 'retail@example.test',
         ]);
 
         self::assertNull($clean['business_name']);
         self::assertSame((int) $retail['id'], $clean['group_id']);
+        self::assertSame('retail@example.test', $clean['email']);
+    }
+
+    public function testSignUpNeedsAnEmailAddressBecauseThatIsWhereTheCodeGoes(): void
+    {
+        $retail = $this->store->groupNamed('Retail');
+
+        $this->expectException(ValidationFailed::class);
+        $this->expectExceptionMessage('email address');
+
+        $this->store->registration->validate([
+            'name' => 'No Email',
+            'group_id' => $retail['id'],
+        ]);
     }
 
     public function testTheAccountListsOnlyThisCustomersOrders(): void
