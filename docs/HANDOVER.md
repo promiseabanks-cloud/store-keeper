@@ -27,8 +27,8 @@ The brief schedules six phases (§22.2–§22.7). Implemented so far:
 | §22.1 Phase 0 (discovery) | Not recorded here | Owner-facing questions live in `OPEN_QUESTIONS.md`. |
 | §22.2 Phase 1 — Foundation | **Done** | Core constants, money, phone, DB abstraction, schema + migrations, capabilities, REST conventions, WP-CLI, CI. |
 | §22.3 Phase 2 — Back office | **Done** | Catalog, pricing resolution, stock ledger with reservations, orders, customers, back-office app shell and its read/write APIs. |
-| §22.4 Phase 3 — Orders, payments, notifications | **Payments, hold expiry and email notifications done; the rest not** | Paystack, Flutterwave and OPay adapters, payment links and signed webhooks are shipped (OPay cannot go live without the merchant ID, Q-001b; no real charge has ever been made). Hold expiry runs hourly and via `wp storekeeper orders expire-holds`. Notifications: templates, outbox in `message_log`, order buyer/staff emails, hourly dispatch and `wp storekeeper messages dispatch`. **Not built:** shipping zones/methods, shipments and public tracking, status bulk actions, WhatsApp/SMS adapters, message templates screen, message log screen, merchant alert delivery. |
-| §22.5 Phase 4 — Storefront | **Mostly done (catalogue, cart, checkout, sign-in, sign-up, account)** | Theme, `/shop/`, categories, search, product page with swatches and group pricing, block + shortcode, OG/canonical. Cart (`/cart/`), guest/retail checkout (`/checkout/`), phone + OTP sign-in (`/sign-in/`, `skf_session`), wholesale self-registration (`/register/`, pending approval honoured) and the account page (`/account/`: order history, repeat order, saved addresses) are shipped; a signed-in wholesale customer checks out at group prices and the order records `customer_id` and the group. Codes are emailed to the customer's address (D-036). **Not built:** WhatsApp/SMS delivery, editing a saved address from the account page, tracking page styling, product sitemap. |
+| §22.4 Phase 3 — Orders, payments, notifications | **Payments, hold expiry, notifications, shipping and parcels done; the rest not** | Paystack, Flutterwave and OPay adapters, payment links and signed webhooks are shipped (OPay cannot go live without the merchant ID, Q-001b; no real charge has ever been made). Hold expiry runs hourly and via `wp storekeeper orders expire-holds`. Notifications: templates, outbox in `message_log`, order buyer/staff emails, shipment emails, hourly dispatch and `wp storekeeper messages dispatch`. Shipping: zones, areas and all five method types, quoted from the cart at checkout (D-037; real fees/LGA dataset are Q-013/Q-018). Parcels: multiple per order, per-parcel stock commit, dispatch details, POD collection, returns with optional restock, events timeline, bulk status, public `/track/{number}/?t=` page (D-038). **Not built:** WhatsApp/SMS adapters, message templates screen, message log screen, merchant alert delivery, courier API adapters (§13.3 v2), dispatch-sheet printing. |
+| §22.5 Phase 4 — Storefront | **Mostly done (catalogue, cart, checkout, sign-in, sign-up, account)** | Theme, `/shop/`, categories, search, product page with swatches and group pricing, block + shortcode, OG/canonical. Cart (`/cart/`), guest/retail checkout (`/checkout/`), phone + OTP sign-in (`/sign-in/`, `skf_session`), wholesale self-registration (`/register/`, pending approval honoured) and the account page (`/account/`: order history, repeat order, saved addresses) are shipped; a signed-in wholesale customer checks out at group prices and the order records `customer_id` and the group. Codes are emailed to the customer's address (D-036). The order and tracking pages now show the parcel timeline. **Not built:** WhatsApp/SMS delivery, editing a saved address from the account page, bank-transfer proof upload, product sitemap. |
 | §22.6 Phase 5 — POS + offline sync | **Not started** | Only the tables exist. |
 | §22.7 Phase 6 — Platform layer | **Not started** | `plugins/storekeeper-platform` is a plugin header and nothing else. |
 
@@ -42,7 +42,7 @@ Commit trail (oldest first relevant): `a1129bc` core → `71f82b5` WP integratio
 `312ea3e` engine → `ef58166` back-office shell + OPay + preview → `c5d38de` orders
 → `1bf2be8` gateways → `22ed483` customers/prices/locations/staff/alerts →
 `2b2e9e8` back-office redesign → `63acd0a` storefront → `e8d87df` handover docs
-→ cart, checkout and hold expiry (this increment).
+→ cart, checkout and hold expiry → notifications outbox → storefront sign-in → wholesale sign-up and account → email OTP delivery → shipping zones/methods and parcels (this increment).
 
 ## 3. Intent — how the work is being run
 
@@ -76,6 +76,8 @@ plugins/storekeeper-commerce/
                                 refresh statuses
   src/Payments/                 GatewayAdapter + Paystack/Flutterwave/OPay,
                                 PaymentService, PaymentRepository, settings
+  src/Shipping/                 zones, areas, method quotes (§13.3)
+  src/Orders/                   OrderService + ShipmentService/Repository
   src/Rest/                     thin controllers; no business logic
   src/Admin/                    wp-admin menu, assets, body class
   src/Storefront/               storefront read model, routes, cache, block
@@ -170,7 +172,7 @@ php vendor/bin/phpunit --filter StorefrontTest
 composer lint                                # php -l over every plugin file
 ```
 
-Last green run: **120 tests, 1,326 assertions** at commit `63acd0a`.
+Last green run: **202 tests, 1,637 assertions** (shipping and parcels included).
 
 ### Preview site
 
@@ -239,38 +241,31 @@ shoppers are not WP users); the seed is not idempotent for locations.
 
 ## 9. Recommended next step
 
-The storefront now covers the whole guest and customer path: browse, cart,
-checkout, register, sign in, account and repeat order. Next are the shipping-zone
-table and shipment tracking (then WhatsApp/SMS OTP delivery if the owner prefers it
-to email),
-then the POS and platform layers. `docs/INTEGRATIONS.md` lists every credential
-still needed and the exact place each one plugs in.
+The customer path is complete end to end — browse, cart, checkout with zone-based
+delivery, sign-up, sign-in, account, repeat order, and a token-protected tracking
+page with a parcel timeline. Shipping and parcels close the §22.4 fulfilment gap.
 
-Suggested shape, consistent with what exists:
+What remains before POS:
 
-- `{p}customer_sessions` and `{p}otp_codes` already exist; build the service that
-  issues a 6-digit code, hashes it, enforces 10-minute expiry / 5 attempts / 5 per
-  phone per hour / 20 per IP per hour, and issues the 32-byte session cookie
-  (90-day sliding expiry, "sign out of all devices").
-- OTP delivery needs `src/Notifications` and the adapters from §22.4 (Q-005/Q-006).
-  Until then, the session seam is `Storefront\CustomerContext`; set it from the
-  session cookie in `Storefront::register()`.
-- Once a customer can sign in: merge the guest cart into their active cart on
-  login, wire the address book (`CustomerService::addAddress` exists), order
-  history (`OrderRepository::list` filtered by customer), and wholesale
-  registration with the approval queue that already exists.
-- Then the public tracking page (`OrderService::findByPublicToken` already returns
-  the order) and the notifications that go with status changes.
+- **Staff screens for parcels.** The REST routes exist (`POST /orders/{uuid}/shipments`,
+  `PATCH /shipments/{uuid}`, `POST /shipments/bulk-status`, `/shipping/*`), but the
+  back-office app has no shipments or shipping-settings screen yet. The "to pack"
+  bulk buttons, dispatch sheet and printable packing slip (§14.2) belong there.
+- **Message log and templates screen** (§12.4), and merchant alert delivery.
+- **Owner decisions still open:** real zone/fee data (Q-013), the Nigerian LGA
+  dataset (Q-018), WhatsApp/SMS (Q-005/Q-006), mail From address (Q-017), OPay
+  merchant ID (Q-001b), bank details (Q-015).
 
-After that, §22.4's remaining fulfilment work: shipping zones/methods, shipments,
-bulk status actions, and the message log.
+Then §22.6 POS and offline sync, and §22.7 the platform layer.
+
+`docs/INTEGRATIONS.md` lists every credential still needed and where it plugs in.
 
 ## 10. Document index
 
 | File | Read it for |
 |---|---|
 | `docs/BRIEF.md` | Requirements, phases, E2E tests, data model. |
-| `docs/DECISIONS.md` | Every deviation and why (D-001…D-025). Read before changing anything structural. |
+| `docs/DECISIONS.md` | Every deviation and why (D-001…D-038). Read before changing anything structural. |
 | `docs/OPEN_QUESTIONS.md` | What is waiting on the owner, and the placeholder in code. |
 | `docs/API.md` | Shipped endpoints, error codes, shapes. |
 | `docs/PREVIEW.md` | Rebuilding the preview stack from zero. |

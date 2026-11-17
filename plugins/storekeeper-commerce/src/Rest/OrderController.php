@@ -12,6 +12,7 @@ use StoreKeeper\Commerce\Core\Uuid;
 use StoreKeeper\Commerce\Customers\CustomerService;
 use StoreKeeper\Commerce\Orders\OrderRepository;
 use StoreKeeper\Commerce\Orders\OrderService;
+use StoreKeeper\Commerce\Orders\ShipmentService;
 use StoreKeeper\Commerce\Payments\PaymentService;
 
 /**
@@ -25,6 +26,7 @@ final class OrderController
         private readonly CustomerService $customers,
         private readonly PaymentService $payments,
         private readonly Api $api,
+        private readonly ?ShipmentService $shipments = null,
     ) {
     }
 
@@ -112,6 +114,7 @@ final class OrderController
                     'order' => $order,
                     'items' => $this->orders->items($orderId),
                     'payments' => $this->orders->payments($orderId),
+                    'shipments' => $this->shipments === null ? [] : $this->shipments->forOrder($orderId),
                 ],
             ], 200);
         } catch (StoreKeeperException $error) {

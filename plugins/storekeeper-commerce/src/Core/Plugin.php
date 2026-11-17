@@ -24,6 +24,8 @@ use StoreKeeper\Commerce\Inventory\InventoryRepository;
 use StoreKeeper\Commerce\Inventory\InventoryService;
 use StoreKeeper\Commerce\Orders\OrderRepository;
 use StoreKeeper\Commerce\Orders\OrderService;
+use StoreKeeper\Commerce\Orders\ShipmentRepository;
+use StoreKeeper\Commerce\Orders\ShipmentService;
 use StoreKeeper\Commerce\Payments\Gateway\GatewayRegistry;
 use StoreKeeper\Commerce\Payments\Gateway\WordPressHttpClient;
 use StoreKeeper\Commerce\Payments\GatewaySettings;
@@ -47,6 +49,8 @@ use StoreKeeper\Commerce\Storefront\Otp\EmailOtpSender;
 use StoreKeeper\Commerce\Storefront\Otp\LogOtpSender;
 use StoreKeeper\Commerce\Storefront\Otp\OtpSender;
 use StoreKeeper\Commerce\Storefront\Storefront;
+use StoreKeeper\Commerce\Shipping\ShippingRepository;
+use StoreKeeper\Commerce\Shipping\ShippingService;
 
 /**
  * Builds the engine container for the current site (§6.1, §7.3).
@@ -156,6 +160,30 @@ final class Plugin
             $c->get(Clock::class),
             $c->get(CustomerRepository::class),
             (string) get_option(Brand::OPTION_PREFIX . 'order_prefix', 'SK')
+        ));
+
+        // Shipping (§13.3) and parcels (§14.1). Zones decide the fee; a parcel
+        // commits its own stock and writes the timeline the customer sees.
+        $container->singleton(ShippingRepository::class, static fn (Container $c): ShippingRepository => new ShippingRepository(
+            $c->get(Connection::class)
+        ));
+        $container->singleton(ShippingService::class, static fn (Container $c): ShippingService => new ShippingService(
+            $c->get(ShippingRepository::class),
+            $c->get(Audit\AuditLogger::class)
+        ));
+        $container->singleton(ShipmentRepository::class, static fn (Container $c): ShipmentRepository => new ShipmentRepository(
+            $c->get(Connection::class),
+            $c->get(Clock::class)
+        ));
+        $container->singleton(ShipmentService::class, static fn (Container $c): ShipmentService => new ShipmentService(
+            $c->get(Connection::class),
+            $c->get(ShipmentRepository::class),
+            $c->get(OrderRepository::class),
+            $c->get(OrderService::class),
+            $c->get(InventoryService::class),
+            $c->get(Hooks\Hooks::class),
+            $c->get(Audit\AuditLogger::class),
+            $c->get(Clock::class)
         ));
 
         $container->singleton(OverviewService::class, static fn (Container $c): OverviewService => new OverviewService(
@@ -281,7 +309,8 @@ final class Plugin
             $c->get(CustomerRepository::class),
             (int) get_option(Brand::OPTION_PREFIX . 'flat_shipping_kobo', 0),
             $c->get(GatewayRegistry::class)->configuredSlugs(),
-            $c->get(PaymentService::class)
+            $c->get(PaymentService::class),
+            $c->get(ShippingService::class)
         ));
 
         // The engine's shared dependencies are looked up by interface.
@@ -349,6 +378,38 @@ final class Plugin
                     'store_name' => (string) get_bloginfo('name'),
                     'order_url' => Storefront::orderUrl($order),
                     'bank_details' => (string) get_option(Brand::OPTION_PREFIX . 'bank_details', ''),
+                ]
+            );
+        });
+
+        // §14.1: the customer hears about a parcel once it is on its way or has
+        // arrived. Delivery is queued through the same outbox as the order
+        // confirmation, never sent inside the staff request.
+        add_action(Brand::hook('shipment/status_changed'), static function (array $payload) use ($container): void {
+            $order = $payload['order'] ?? null;
+            $shipment = $payload['shipment'] ?? null;
+
+            if (!is_array($order) || !is_array($shipment)) {
+                return;
+            }
+
+            $address = json_decode((string) ($order['shipping_address'] ?? ''), true);
+            $buyerEmail = is_array($address) ? ($address['email'] ?? null) : null;
+
+            if ((!is_string($buyerEmail) || $buyerEmail === '') && !empty($order['customer_id'])) {
+                $customer = $container->get(CustomerRepository::class)->customer((int) $order['customer_id']);
+                $buyerEmail = $customer['email'] ?? null;
+            }
+
+            $container->get(OrderNotifications::class)->shipmentUpdated(
+                $order,
+                $shipment,
+                (string) ($payload['to'] ?? ''),
+                is_string($buyerEmail) ? $buyerEmail : null,
+                [
+                    'store_name' => (string) get_bloginfo('name'),
+                    'order_url' => Storefront::orderUrl($order),
+                    'tracking_url' => Storefront::trackUrl($order),
                 ]
             );
         });

@@ -97,6 +97,7 @@ final class CartService
     {
         $lines = [];
         $subtotal = 0;
+        $weightGrams = 0;
         $errors = [];
         $variantIds = [];
         $rows = $this->carts->items((int) $cart['id']);
@@ -112,6 +113,7 @@ final class CartService
         foreach ($rows as $row) {
             $line = $this->describeLine($row, $customer, $stock);
             $subtotal += $line['line_total_kobo'];
+            $weightGrams += $line['weight_grams'];
 
             if ($line['error'] !== null) {
                 $errors[] = $line['product_name'] . ': ' . $line['error'];
@@ -128,6 +130,7 @@ final class CartService
             'item_count' => $count,
             'lines' => $lines,
             'subtotal_kobo' => $subtotal,
+            'weight_grams' => $weightGrams,
             'has_errors' => $errors !== [],
             'errors' => $errors,
         ];
@@ -468,6 +471,9 @@ final class CartService
             }
         }
 
+        $pieceWeight = $variant === null ? 0 : max(0, (int) ($variant['weight_grams'] ?? 0));
+        $weightGrams = $error === null ? $pieceWeight * $qty * $piecesPerUnit : 0;
+
         $available = $stock[$variantId] ?? 0;
         if ($error === null && $qty * $piecesPerUnit > $available) {
             $error = $available <= 0 ? 'Out of stock' : sprintf('Only %d left', $available);
@@ -485,6 +491,7 @@ final class CartService
             'slug' => $slug,
             'unit_price_kobo' => $amount,
             'line_total_kobo' => $amount === null ? 0 : $amount * $qty,
+            'weight_grams' => $weightGrams,
             'price_source' => $source,
             'available' => $available,
             'error' => $error,

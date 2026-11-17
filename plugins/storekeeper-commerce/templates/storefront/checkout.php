@@ -10,11 +10,18 @@ use StoreKeeper\Commerce\Storefront\Storefront;
 
 $view = Storefront::view();
 $summary = Storefront::cartSummary();
-$options = Storefront::checkoutOptions();
 $customer = Storefront::customer();
 $flash = CartSession::takeFlash();
 
-$shippingId = (string) ($_POST['shipping'] ?? 'pickup');
+// The address fields are also submitted as GET by the "see delivery prices"
+// button, so a fee can be quoted before the shopper commits to an order.
+$value = static fn (string $field): string => (string) ($_POST[$field] ?? $_GET[$field] ?? '');
+
+$state = $value('state');
+$lga = $value('lga');
+$options = Storefront::checkoutOptions($state, $lga);
+
+$shippingId = (string) ($_POST['shipping'] ?? '');
 $paymentId = (string) ($_POST['payment_method'] ?? 'bank_transfer');
 
 get_header();
@@ -68,7 +75,7 @@ get_header();
                             name="name"
                             required
                             autocomplete="name"
-                            value="<?php echo esc_attr((string) ($_POST['name'] ?? $customer['name'] ?? '')); ?>"
+                            value="<?php echo esc_attr($value('name') !== '' ? $value('name') : (string) ($customer['name'] ?? '')); ?>"
                         >
                     </div>
 
@@ -81,7 +88,7 @@ get_header();
                             required
                             autocomplete="tel"
                             placeholder="0803 123 4567"
-                            value="<?php echo esc_attr((string) ($_POST['phone'] ?? $customer['phone_e164'] ?? '')); ?>"
+                            value="<?php echo esc_attr($value('phone') !== '' ? $value('phone') : (string) ($customer['phone_e164'] ?? '')); ?>"
                         >
                         <p class="skf-field__hint">We use this to reach you about this order.</p>
                     </div>
@@ -94,7 +101,7 @@ get_header();
                             name="email"
                             autocomplete="email"
                             placeholder="you@example.com"
-                            value="<?php echo esc_attr((string) ($_POST['email'] ?? $customer['email'] ?? '')); ?>"
+                            value="<?php echo esc_attr($value('email') !== '' ? $value('email') : (string) ($customer['email'] ?? '')); ?>"
                         >
                         <p class="skf-field__hint">Where we send your order confirmation and payment details.</p>
                     </div>
@@ -102,6 +109,12 @@ get_header();
 
                 <section class="skf-panel" aria-labelledby="skf-shipping-title">
                     <h2 id="skf-shipping-title" class="skf-panel__title">Delivery</h2>
+
+                    <?php if ($options['shipping'] === []) : ?>
+                        <p class="skf-field__hint">
+                            Enter your state and local government below, then choose “See delivery prices”.
+                        </p>
+                    <?php endif; ?>
 
                     <?php foreach ($options['shipping'] as $option) : ?>
                         <label class="skf-choice">
@@ -115,42 +128,55 @@ get_header();
                             <span class="skf-choice__body">
                                 <span class="skf-choice__label"><?php echo esc_html($option['label']); ?></span>
                                 <span class="skf-choice__meta">
-                                    <?php echo $option['amount_kobo'] === 0 ? 'Free' : esc_html(Format::price($option['amount_kobo'])); ?>
+                                    <?php if (!empty($option['quoted_later'])) : ?>
+                                        Fee confirmed after the order
+                                    <?php else : ?>
+                                        <?php echo $option['amount_kobo'] === 0 ? 'Free' : esc_html(Format::price($option['amount_kobo'])); ?>
+                                    <?php endif; ?>
                                     — <?php echo esc_html($option['description']); ?>
                                 </span>
                             </span>
                         </label>
                     <?php endforeach; ?>
 
-                    <?php if (count($options['shipping']) > 1) : ?>
-                        <div class="skf-address" data-sk-address>
-                            <p class="skf-field__hint">Fill these in if you chose delivery.</p>
-                            <div class="skf-field">
-                                <label for="skf-line1">Street address</label>
-                                <input id="skf-line1" type="text" name="line1" autocomplete="address-line1" value="<?php echo esc_attr((string) ($_POST['line1'] ?? '')); ?>">
-                            </div>
-                            <div class="skf-field">
-                                <label for="skf-line2">Apartment, suite (optional)</label>
-                                <input id="skf-line2" type="text" name="line2" autocomplete="address-line2" value="<?php echo esc_attr((string) ($_POST['line2'] ?? '')); ?>">
-                            </div>
-                            <div class="skf-field">
-                                <label for="skf-landmark">Landmark (optional)</label>
-                                <input id="skf-landmark" type="text" name="landmark" value="<?php echo esc_attr((string) ($_POST['landmark'] ?? '')); ?>">
-                            </div>
-                            <div class="skf-field">
-                                <label for="skf-city">City (optional)</label>
-                                <input id="skf-city" type="text" name="city" autocomplete="address-level2" value="<?php echo esc_attr((string) ($_POST['city'] ?? '')); ?>">
-                            </div>
-                            <div class="skf-field">
-                                <label for="skf-lga">Local government</label>
-                                <input id="skf-lga" type="text" name="lga" value="<?php echo esc_attr((string) ($_POST['lga'] ?? '')); ?>">
-                            </div>
-                            <div class="skf-field">
-                                <label for="skf-state">State</label>
-                                <input id="skf-state" type="text" name="state" value="<?php echo esc_attr((string) ($_POST['state'] ?? '')); ?>">
-                            </div>
+                    <div class="skf-address" data-sk-address>
+                        <p class="skf-field__hint">
+                            Enter your delivery address and choose “See delivery prices” to load the
+                            options for your area. Pickup needs none of this.
+                        </p>
+                        <div class="skf-field">
+                            <label for="skf-line1">Street address</label>
+                            <input id="skf-line1" type="text" name="line1" autocomplete="address-line1" value="<?php echo esc_attr($value('line1')); ?>">
                         </div>
-                    <?php endif; ?>
+                        <div class="skf-field">
+                            <label for="skf-line2">Apartment, suite (optional)</label>
+                            <input id="skf-line2" type="text" name="line2" autocomplete="address-line2" value="<?php echo esc_attr($value('line2')); ?>">
+                        </div>
+                        <div class="skf-field">
+                            <label for="skf-landmark">Landmark (optional)</label>
+                            <input id="skf-landmark" type="text" name="landmark" value="<?php echo esc_attr($value('landmark')); ?>">
+                        </div>
+                        <div class="skf-field">
+                            <label for="skf-city">City (optional)</label>
+                            <input id="skf-city" type="text" name="city" autocomplete="address-level2" value="<?php echo esc_attr($value('city')); ?>">
+                        </div>
+                        <div class="skf-field">
+                            <label for="skf-lga">Local government</label>
+                            <input id="skf-lga" type="text" name="lga" value="<?php echo esc_attr($lga); ?>">
+                        </div>
+                        <div class="skf-field">
+                            <label for="skf-state">State</label>
+                            <input id="skf-state" type="text" name="state" value="<?php echo esc_attr($state); ?>">
+                        </div>
+
+                        <button
+                            class="skf-button skf-button--ghost"
+                            type="submit"
+                            formmethod="get"
+                            formnovalidate
+                            formaction="<?php echo esc_url(Storefront::checkoutUrl()); ?>"
+                        >See delivery prices</button>
+                    </div>
                 </section>
 
                 <section class="skf-panel" aria-labelledby="skf-payment-title">
@@ -172,7 +198,7 @@ get_header();
 
                     <div class="skf-field">
                         <label for="skf-note">Order note (optional)</label>
-                        <textarea id="skf-note" name="note" rows="3"><?php echo esc_textarea((string) ($_POST['note'] ?? '')); ?></textarea>
+                        <textarea id="skf-note" name="note" rows="3"><?php echo esc_textarea($value('note')); ?></textarea>
                     </div>
                 </section>
             </div>
@@ -200,13 +226,11 @@ get_header();
                         <dt>Subtotal</dt>
                         <dd><?php echo esc_html(Format::price($summary['subtotal_kobo'])); ?></dd>
                     </div>
-                    <?php if (count($options['shipping']) === 1) : ?>
-                        <div>
-                            <dt>Pickup</dt>
-                            <dd>Free</dd>
-                        </div>
-                    <?php endif; ?>
                 </dl>
+
+                <p class="skf-field__hint">
+                    Any delivery fee is shown with the option you choose and added to the total.
+                </p>
 
                 <button type="submit" class="skf-button">Place order</button>
                 <p class="skf-field__hint">

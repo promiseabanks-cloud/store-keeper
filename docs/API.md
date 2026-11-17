@@ -47,7 +47,7 @@ Error codes defined so far (mapped to HTTP status in `Rest\ErrorMapper` when con
 |---|---|---|---|
 | GET | `/orders` | `create_orders` | `?status=&payment_status=&search=&limit=`; includes customer name and phone. |
 | POST | `/orders` | `create_orders` | Body: `channel`, `customer{name,phone}` or `customer_id`, `lines[{variant_id,qty}]`, `payment_method`, `handed_over_now`, optional `location_id`, `discount_kobo`. Honours `Idempotency-Key`. `409 insufficient_stock` when a line cannot be reserved. |
-| GET | `/orders/{uuid}` | `create_orders` | Order, items and payment rows. |
+| GET | `/orders/{uuid}` | `create_orders` | Order, items, payment rows and parcels (with their items and timeline). |
 | POST | `/orders/{uuid}/payments` | `confirm_payments` | Body: `method`, optional `amount_kobo`, `reference`, `note`. Defaults to the outstanding balance; overpayment is refused. |
 | POST | `/orders/{uuid}/cancel` | `cancel_orders` | Body: `reason`. Releases reservations. |
 
@@ -76,12 +76,54 @@ computed in the template.
   `wp storekeeper orders expire-holds`).
 - A second submit of a converted cart returns the order it already created; it does
   not charge or reserve twice.
-- Shipping options: pickup (free) always, delivery (flat) only when
-  `storekeeper_flat_shipping_kobo` > 0. Payment options: bank transfer always, plus
-  each configured gateway (checkout calls `PaymentService::initialize()` and
-  redirects to the hosted page).
+- Shipping options: once the store has configured methods, the address
+  (`state` + `lga`) resolves to a zone and that zone's methods are quoted from the
+  cart subtotal and weight (D-037); pickup methods are always offered. With no
+  method configured, the old pickup + `storekeeper_flat_shipping_kobo` pair is
+  used. `shipping` is `method:{id}` for a configured method. The address fields are
+  also submitted as a **GET** to `/checkout/` (the "See delivery prices" button),
+  so a fee can be quoted before the order is placed; nothing from that GET is
+  trusted — `place()` re-quotes from the method config.
+- Payment options: bank transfer always, plus each configured gateway (checkout
+  calls `PaymentService::initialize()` and redirects to the hosted page).
 - The confirmation page is `/order-received/{number}/?token={public_token}`; the
   token is required and is the only way an order is readable without staff auth.
+  `/track/{number}/?t={public_token}` is the same order for a customer arriving
+  from an email or WhatsApp link, with the parcel timeline (D-038).
+
+## Shipping zones and methods (shipped)
+
+| Method | Path | Capability | Notes |
+|---|---|---|---|
+| GET | `/shipping/zones` | `create_orders` | Zones with their areas (`state`, `lga`; `lga: null` = whole state). Ordered by `sort_order`. |
+| POST | `/shipping/zones` | `manage_settings` | Body: `name`, optional `sort_order`, `areas[{state,lga}]`. An empty `areas` list makes it the catch-all. |
+| GET | `/shipping/methods` | `create_orders` | Every method, active or not, with decoded `config` and `group_ids`. |
+| POST | `/shipping/methods` | `manage_settings` | Body: `name`, `type` (`flat`, `weight_band`, `free_over`, `pickup`, `quote_later`), `config` (per §13.3), optional `zone_id`, `group_ids`, `is_active`, `sort_order`. A delivery method needs a zone; pickup must not have one. |
+| PATCH | `/shipping/methods/{id}` | `manage_settings` | Same body; omitted fields keep their current value. |
+
+Config validation: `flat` needs `amount_kobo`, `free_over` needs
+`threshold_kobo`, `weight_band` needs at least one `{max_grams, amount_kobo}` band
+and may set `over_per_kg_kobo`. `pickup` accepts `instructions`, `quote_later`
+accepts `message`. Fees are integers in kobo.
+
+## Shipments and tracking (shipped)
+
+| Method | Path | Capability | Notes |
+|---|---|---|---|
+| GET | `/orders/{uuid}/shipments` | `create_orders` | Parcels with their lines and timeline. |
+| POST | `/orders/{uuid}/shipments` | `update_shipments` | Body: optional `lines[{order_item_id,qty_pieces}]` (default: everything not packed or held by another pending parcel), optional `carrier`, `waybill_number`, `rider_name`, `rider_phone`, `method_name`, `photo_attachment_id`, `location_id`, `note`. Creates a `pending` parcel. |
+| GET | `/shipments/{uuid}` | `create_orders` | One parcel with lines and events. |
+| PATCH | `/shipments/{uuid}` | `update_shipments` | Body: `status` and/or dispatch details (`carrier`, `waybill_number`, `rider_name`, `rider_phone`, `method_name`, `photo_attachment_id`, `note`), plus `restock` on a return and `collected_kobo` / `collection_method` on delivery. |
+| POST | `/shipments/bulk-status` | `update_shipments` | Body: `shipment_ids[]`, `status`. Returns `updated` and per-parcel `failed` messages; one bad parcel does not stop the rest. |
+
+Lifecycle (§14.1): `pending → packed → dispatched|ready_for_pickup → delivered`, with
+`failed_delivery` able to retry or return, and `cancelled` only before packing.
+Packing commits that parcel's reservations; dispatch needs a carrier or method;
+`failed_delivery` needs a note. Invalid moves return `409 invalid_transition`.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/track/{number}/?t={public_token}` | public token | Server-rendered page: items, totals, payment status, bank details, parcel timeline, carrier, waybill, rider phone. No token or a wrong token is a 404. |
 
 ## Sign-up and account (shipped, storefront forms)
 

@@ -32,8 +32,12 @@ use StoreKeeper\Commerce\Storefront\StorefrontAccount;
 use StoreKeeper\Commerce\Storefront\StorefrontRegistration;
 use StoreKeeper\Commerce\Orders\OrderRepository;
 use StoreKeeper\Commerce\Orders\OrderService;
+use StoreKeeper\Commerce\Orders\ShipmentRepository;
+use StoreKeeper\Commerce\Orders\ShipmentService;
 use StoreKeeper\Commerce\Pricing\PricingRepository;
 use StoreKeeper\Commerce\Pricing\PricingService;
+use StoreKeeper\Commerce\Shipping\ShippingRepository;
+use StoreKeeper\Commerce\Shipping\ShippingService;
 
 /**
  * A fully wired store on a fresh test schema (engine only, no WordPress).
@@ -77,6 +81,14 @@ final class TestStore
     public OrderRepository $orderRepository;
 
     public OrderService $orders;
+
+    public ShipmentRepository $shipmentRepository;
+
+    public ShipmentService $shipments;
+
+    public ShippingRepository $shippingRepository;
+
+    public ShippingService $shipping;
 
     public CartRepository $cartRepository;
 
@@ -167,6 +179,21 @@ final class TestStore
             'TEST'
         );
 
+        $this->shippingRepository = new ShippingRepository($db);
+        $this->shipping = new ShippingService($this->shippingRepository, $this->audit);
+
+        $this->shipmentRepository = new ShipmentRepository($db, $this->clock);
+        $this->shipments = new ShipmentService(
+            $db,
+            $this->shipmentRepository,
+            $this->orderRepository,
+            $this->orders,
+            $this->inventory,
+            $this->hooks,
+            $this->audit,
+            $this->clock
+        );
+
         $this->cartRepository = new CartRepository($db);
         $this->cart = new CartService(
             $this->cartRepository,
@@ -196,7 +223,8 @@ final class TestStore
             $this->customerRepository,
             $this->flatShippingKobo,
             [],
-            null
+            null,
+            $this->shipping
         );
     }
 

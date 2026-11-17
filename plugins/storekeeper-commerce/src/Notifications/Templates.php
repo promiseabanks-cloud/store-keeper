@@ -39,6 +39,34 @@ final class Templates
                     . "{{order_url}}\n\n"
                     . "{{store_name}}",
             ],
+            'shipment_dispatched' => [
+                'channel' => 'email',
+                'category' => 'utility',
+                'subject' => 'Order {{order_number}} is on its way — {{store_name}}',
+                'body' => "Hi {{customer_name}},\n\n"
+                    . "Your order {{order_number}} has left the shop.\n\n"
+                    . "Carrier: {{carrier}}\nWaybill: {{waybill_number}}\nRider: {{rider_name}} {{rider_phone}}\n\n"
+                    . "Track it: {{tracking_url}}\n\n"
+                    . "{{store_name}}",
+            ],
+            'shipment_ready_for_pickup' => [
+                'channel' => 'email',
+                'category' => 'utility',
+                'subject' => 'Order {{order_number}} is ready — {{store_name}}',
+                'body' => "Hi {{customer_name}},\n\n"
+                    . "Order {{order_number}} is packed and waiting for you at the shop.\n\n"
+                    . "View the order: {{order_url}}\n\n"
+                    . "{{store_name}}",
+            ],
+            'shipment_delivered' => [
+                'channel' => 'email',
+                'category' => 'utility',
+                'subject' => 'Order {{order_number}} delivered — {{store_name}}',
+                'body' => "Hi {{customer_name}},\n\n"
+                    . "Order {{order_number}} has been delivered. Thank you.\n\n"
+                    . "View the order: {{order_url}}\n\n"
+                    . "{{store_name}}",
+            ],
             'otp_login' => [
                 'channel' => 'email',
                 'category' => 'authentication',
@@ -57,6 +85,13 @@ final class Templates
     /** @return list<string> */
     public static function events(): array
     {
-        return ['order_created_buyer', 'order_created_staff', 'otp_login'];
+        return [
+            'order_created_buyer',
+            'order_created_staff',
+            'shipment_dispatched',
+            'shipment_ready_for_pickup',
+            'shipment_delivered',
+            'otp_login',
+        ];
     }
 }

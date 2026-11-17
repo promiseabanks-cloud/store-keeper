@@ -83,11 +83,26 @@ changes nothing, flashes "This page had expired, so the cart was not changed" (o
 "…so the order was not placed" on checkout) and redirects back to a freshly
 rendered form with a new nonce. It never reaches `wp_nonce_ays()`, whose bare
 "link you followed has expired" screen loses the cart's context. Checkout validates the shopper, picks the
-shipping fee (pickup is free; delivery appears only when
-`storekeeper_flat_shipping_kobo` is set), then calls `OrderService::create()` with
-`channel=web`. OrderService re-prices and reserves in one transaction, so a
+shipping fee, then calls `OrderService::create()` with `channel=web`. OrderService re-prices and reserves in one transaction, so a
 browser cannot influence the price and two shoppers cannot oversell the last
 piece.
+
+## Delivery options and tracking
+
+Once the store has shipping methods (see `API.md`), checkout quotes delivery from
+the address: enter state and LGA, press **See delivery prices**, and the methods
+for that zone appear with their fees. The button submits the page as a GET, so the
+fee can be seen before the order is placed; the submitted method is re-quoted
+server-side from its configuration and the cart's weight, so the browser cannot
+name a price. Pickup methods are always offered. With no method configured, the
+older pickup + `storekeeper_flat_shipping_kobo` pair is used, so an existing shop
+keeps working. A `quote_later` method adds no fee and the page says the fee will
+be confirmed, never "free".
+
+Every order page shows the parcels for that order: status, carrier, waybill,
+rider phone and a dated timeline. `/track/{number}/?t={public_token}` is the same
+view without signing in, for links shared by email or WhatsApp; a missing or wrong
+token is a 404. The tracking URL is included in the order messages.
 
 ## Creating an account
 
@@ -178,11 +193,11 @@ each colour value. It is preview tooling, not part of the plugin.
 
 ## Not done yet
 
-- Wholesale registration form, account order history, address book screen,
-  order tracking page. (Sign-in itself is shipped; see above.)
-- Shipping zones and calculated delivery (checkout offers pickup + one flat fee).
+- Editing or deleting a saved address from the account page.
+- Uploading a bank-transfer proof from the order page (staff confirm payments from
+  the back office today).
 - Public REST endpoints for cart/checkout (D-028); the forms are the supported path.
-- Wholesale registration form.
+- Fixed Nigerian state/LGA lists in the address form (Q-018).
 - Product XML sitemap and structured data.
 - Any block theme: the grid block works, but the product page route still needs a
   theme with `header.php`/`footer.php` (see D-024).

@@ -27,6 +27,8 @@ final class Storefront
 
     public const ORDER = 'sk_order';
 
+    public const TRACK = 'sk_track';
+
     public static function register(CatalogView $view): void
     {
         add_action('init', static function (): void {
@@ -34,7 +36,7 @@ final class Storefront
         });
 
         add_filter('query_vars', static function (array $vars): array {
-            return array_merge($vars, [self::VIEW, self::PRODUCT, self::CATEGORY, self::PAGE, self::ORDER]);
+            return array_merge($vars, [self::VIEW, self::PRODUCT, self::CATEGORY, self::PAGE, self::ORDER, self::TRACK]);
         });
 
         CartActions::register();
@@ -94,6 +96,13 @@ final class Storefront
             'index.php?' . self::VIEW . '=received&' . self::ORDER . '=$matches[1]',
             'top'
         );
+        // §14.3: the same order, reachable without signing in, from a link that
+        // carries the order's public token.
+        add_rewrite_rule(
+            '^track/([A-Za-z0-9-]+)/?$',
+            'index.php?' . self::VIEW . '=track&' . self::TRACK . '=$matches[1]',
+            'top'
+        );
     }
 
     public static function activate(): void
@@ -115,6 +124,7 @@ final class Storefront
             'register' => $root . 'register.php',
             'account' => $root . 'account.php',
             'received' => $root . 'order-received.php',
+            'track' => $root . 'track.php',
             default => null,
         };
 
@@ -147,7 +157,7 @@ final class Storefront
         }
 
         // An order page is only readable with the order's public token.
-        if ($view === 'received' && self::currentOrder() === null) {
+        if (in_array($view, ['received', 'track'], true) && self::currentOrder() === null) {
             global $wp_query;
             $wp_query->set_404();
             status_header(404);
@@ -202,15 +212,24 @@ final class Storefront
         return CartSession::summary();
     }
 
-    /** @return array{shipping:list<array<string,mixed>>,payment:list<array<string,mixed>>} */
-    public static function checkoutOptions(): array
+    /**
+     * Delivery options for the address typed on the checkout page (§13.3).
+     *
+     * @return array{shipping:list<array<string,mixed>>,payment:list<array<string,mixed>>}
+     */
+    public static function checkoutOptions(string $state = '', string $lga = ''): array
     {
         $checkout = \StoreKeeper\Commerce\Core\Plugin::container()->get(
             \StoreKeeper\Commerce\Checkout\CheckoutService::class
         );
 
         return [
-            'shipping' => $checkout->shippingOptions(),
+            'shipping' => $checkout->shippingOptions(
+                $state === '' ? null : $state,
+                $lga === '' ? null : $lga,
+                self::customer(),
+                self::cartSummary()
+            ),
             'payment' => $checkout->paymentOptions(),
         ];
     }
@@ -219,7 +238,14 @@ final class Storefront
     public static function currentOrder(): ?array
     {
         $number = (string) get_query_var(self::ORDER);
-        $token = isset($_GET['token']) ? sanitize_text_field(wp_unslash((string) $_GET['token'])) : '';
+
+        if ($number === '') {
+            $number = (string) get_query_var(self::TRACK);
+        }
+
+        $token = isset($_GET['t'])
+            ? sanitize_text_field(wp_unslash((string) $_GET['t']))
+            : (isset($_GET['token']) ? sanitize_text_field(wp_unslash((string) $_GET['token'])) : '');
 
         if ($number === '' || $token === '') {
             return null;
@@ -228,6 +254,19 @@ final class Storefront
         return \StoreKeeper\Commerce\Core\Plugin::container()
             ->get(\StoreKeeper\Commerce\Orders\OrderService::class)
             ->findByPublicToken($number, $token);
+    }
+
+    /**
+     * The link staff share with a customer: no login, token in the query (§14.3).
+     *
+     * @param array<string,mixed> $order
+     */
+    public static function trackUrl(array $order): string
+    {
+        return add_query_arg(
+            ['t' => (string) $order['public_token']],
+            home_url('/track/' . rawurlencode((string) $order['number']) . '/')
+        );
     }
 
     /** @param array<string,mixed> $order */
@@ -291,7 +330,7 @@ final class Storefront
             $parts['title'] = 'Your account';
         } elseif ($viewName === 'checkout') {
             $parts['title'] = 'Checkout';
-        } elseif ($viewName === 'received') {
+        } elseif ($viewName === 'received' || $viewName === 'track') {
             $order = self::currentOrder();
             $parts['title'] = $order === null ? 'Order' : 'Order ' . $order['number'];
         }

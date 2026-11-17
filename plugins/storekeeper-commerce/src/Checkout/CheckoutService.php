@@ -13,6 +13,7 @@ use StoreKeeper\Commerce\Core\Phone;
 use StoreKeeper\Commerce\Customers\CustomerRepository;
 use StoreKeeper\Commerce\Orders\OrderService;
 use StoreKeeper\Commerce\Payments\PaymentService;
+use StoreKeeper\Commerce\Shipping\ShippingService;
 
 /**
  * Turns a cart into an order (§22.5, §7).
@@ -40,17 +41,46 @@ final class CheckoutService
         private readonly int $flatShippingKobo = 0,
         private readonly array $gatewaySlugs = [],
         private readonly ?PaymentService $payments = null,
+        private readonly ?ShippingService $shipping = null,
     ) {
     }
 
-    /** @return list<array{id:string,label:string,amount_kobo:int,description:string}> */
-    public function shippingOptions(): array
+    /**
+     * What the shopper can choose for delivery (§13.3).
+     *
+     * With no shipping methods configured, the store keeps offering the simple
+     * pickup/flat pair the storefront has always had. Once the merchant has set
+     * methods up, the destination decides which ones exist and every fee is
+     * re-quoted here from the cart, never taken from the browser.
+     *
+     * @param array<string,mixed>|null $customer
+     * @param array<string,mixed>|null $summary
+     * @return list<array<string,mixed>>
+     */
+    public function shippingOptions(
+        ?string $state = null,
+        ?string $lga = null,
+        ?array $customer = null,
+        ?array $summary = null,
+    ): array {
+        if ($this->shipping !== null && $this->shipping->hasMethods()) {
+            return $this->zoneShippingOptions($state, $lga, $customer, $summary);
+        }
+
+        return $this->legacyShippingOptions();
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function legacyShippingOptions(): array
     {
         $options = [[
             'id' => 'pickup',
             'label' => 'Pick up at the shop',
             'amount_kobo' => 0,
             'description' => 'We will let you know when your order is ready.',
+            'type' => 'pickup',
+            'pickup' => true,
+            'quoted_later' => false,
         ]];
 
         if ($this->flatShippingKobo > 0) {
@@ -59,10 +89,36 @@ final class CheckoutService
                 'label' => 'Delivery',
                 'amount_kobo' => $this->flatShippingKobo,
                 'description' => 'One flat delivery fee across the store.',
+                'type' => 'flat',
+                'pickup' => false,
+                'quoted_later' => false,
             ];
         }
 
         return $options;
+    }
+
+    /**
+     * @param array<string,mixed>|null $customer
+     * @param array<string,mixed>|null $summary
+     * @return list<array<string,mixed>>
+     */
+    private function zoneShippingOptions(?string $state, ?string $lga, ?array $customer, ?array $summary): array
+    {
+        $groupId = $customer !== null && isset($customer['group_id']) ? (int) $customer['group_id'] : null;
+
+        if ($groupId === null) {
+            $default = $this->customerRepository->defaultGroup();
+            $groupId = $default === null ? null : (int) $default['id'];
+        }
+
+        return $this->shipping->options(
+            $state,
+            $lga,
+            $groupId,
+            (int) ($summary['subtotal_kobo'] ?? 0),
+            (int) ($summary['weight_grams'] ?? 0)
+        );
     }
 
     /** @return list<array{id:string,label:string}> */
@@ -137,20 +193,34 @@ final class CheckoutService
             throw new ValidationFailed('That phone number does not look right.', ['phone' => 'Use 0803 123 4567.']);
         }
 
-        $shippingId = (string) ($input['shipping'] ?? 'pickup');
-        $shipping = array_column($this->shippingOptions(), null, 'id')[$shippingId] ?? null;
+        $state = $this->clean($input['state'] ?? null);
+        $lga = $this->clean($input['lga'] ?? null);
+        $options = $this->shippingOptions($state, $lga, $customer, $summary);
+        $shippingId = (string) ($input['shipping'] ?? ($options[0]['id'] ?? 'pickup'));
+        $shipping = array_column($options, null, 'id')[$shippingId] ?? null;
 
         if ($shipping === null) {
-            throw new ValidationFailed('Choose how you would like to receive the order.', ['shipping' => 'Required.']);
+            throw new ValidationFailed(
+                'Choose how you would like to receive the order.',
+                ['shipping' => $state === null ? 'Enter your state and local government to see delivery prices.' : 'Unsupported for this address.']
+            );
         }
+
+        $isDelivery = !($shipping['pickup'] ?? false);
 
         // Contact details are kept for pickup orders too: it is the only place
         // the order stores who to call when the parcel is ready.
         $address = [
             'recipient_name' => $name,
             'phone_e164' => $phone,
-            'method' => $shippingId,
+            'method' => $isDelivery ? 'delivery' : 'pickup',
+            'shipping_option' => $shippingId,
+            'shipping_label' => $shipping['label'],
         ];
+
+        if (!empty($shipping['quoted_later'])) {
+            $address['quote_later'] = true;
+        }
 
         // Contact details are kept for pickup orders too: they are the only
         // place the order stores who to call, and where to email the receipt.
@@ -158,7 +228,7 @@ final class CheckoutService
             $address['email'] = $email;
         }
 
-        if ($shippingId === 'delivery') {
+        if ($isDelivery) {
             foreach (['line1' => 'Street address', 'lga' => 'Local government', 'state' => 'State'] as $field => $label) {
                 if (trim((string) ($input[$field] ?? '')) === '') {
                     throw new ValidationFailed($label . ' is required for delivery.', [$field => 'Required.']);
@@ -207,6 +277,7 @@ final class CheckoutService
             'lines' => $lines,
             'payment_method' => $paymentMethod,
             'shipping_kobo' => $shipping['amount_kobo'],
+            'shipping_method_id' => isset($shipping['method_id']) ? (int) $shipping['method_id'] : null,
             'shipping_address' => $address,
             'customer_note' => $this->clean($input['note'] ?? null),
             'idempotency_key' => $this->idempotencyKey((string) $cart['uuid'], $input, $lines),
@@ -263,6 +334,9 @@ final class CheckoutService
             'name' => $input['name'] ?? null,
             'phone' => $input['phone'] ?? null,
             'shipping' => $input['shipping'] ?? null,
+            'state' => $input['state'] ?? null,
+            'lga' => $input['lga'] ?? null,
+            'line1' => $input['line1'] ?? null,
             'payment_method' => $input['payment_method'] ?? null,
             'note' => $input['note'] ?? null,
             'lines' => $lines,

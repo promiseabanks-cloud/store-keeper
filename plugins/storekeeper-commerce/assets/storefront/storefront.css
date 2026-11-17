@@ -1032,6 +1032,111 @@ button.skf-button {
     line-height: 1.7;
 }
 
+/* Tracking timeline ------------------------------------------------------ */
+
+.skf-timeline {
+    margin-top: 24px;
+}
+
+.skf-parcel {
+    padding: 14px 0 18px;
+    border-top: 1px solid var(--skf-line);
+}
+
+.skf-parcel:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.skf-parcel__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.skf-parcel__meta {
+    color: var(--skf-muted);
+    font-size: 12.5px;
+}
+
+.skf-parcel__lines {
+    list-style: none;
+    margin: 0 0 10px;
+    padding: 0;
+    font-size: 14px;
+}
+
+.skf-parcel__lines li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 3px 0;
+}
+
+.skf-parcel__lines small {
+    color: var(--skf-muted);
+}
+
+.skf-parcel__lines span {
+    margin-left: auto;
+    color: var(--skf-muted);
+    font-size: 12.5px;
+}
+
+.skf-parcel__details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+    margin: 0 0 12px;
+    font-size: 13px;
+}
+
+.skf-parcel__details div {
+    display: flex;
+    gap: 6px;
+}
+
+.skf-parcel__details dt {
+    color: var(--skf-muted);
+    margin: 0;
+}
+
+.skf-parcel__details dd {
+    margin: 0;
+}
+
+.skf-timeline__steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.skf-timeline__step {
+    display: flex;
+    gap: 14px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--skf-line);
+    font-size: 13px;
+}
+
+.skf-timeline__step:last-child {
+    border-bottom: 0;
+}
+
+.skf-timeline__when {
+    min-width: 92px;
+    color: var(--skf-muted);
+    font-size: 12.5px;
+}
+
+.skf-timeline__what small {
+    display: block;
+    color: var(--skf-muted);
+    font-size: 12.5px;
+}
+
 /* Blog fallback and pages ----------------------------------------------- */
 
 .skf-page {

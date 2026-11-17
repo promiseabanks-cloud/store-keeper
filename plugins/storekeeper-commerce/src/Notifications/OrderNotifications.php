@@ -56,6 +56,52 @@ final class OrderNotifications
         }
     }
 
+    /**
+     * Tell the buyer a parcel moved (§14.1, §14.3). Only dispatched and
+     * delivered parcels queue a message; packing is an internal step.
+     *
+     * @param array<string,mixed> $order
+     * @param array<string,mixed> $shipment
+     * @param array{store_name:string,order_url:string,tracking_url:string} $store
+     */
+    public function shipmentUpdated(
+        array $order,
+        array $shipment,
+        string $status,
+        ?string $buyerEmail,
+        array $store,
+    ): void {
+        $event = match ($status) {
+            'dispatched' => 'shipment_dispatched',
+            'ready_for_pickup' => 'shipment_ready_for_pickup',
+            'delivered' => 'shipment_delivered',
+            default => null,
+        };
+
+        if ($event === null || !$this->isEmail($buyerEmail)) {
+            return;
+        }
+
+        $address = json_decode((string) ($order['shipping_address'] ?? ''), true);
+        $address = is_array($address) ? $address : [];
+
+        $this->messages->queue($event, (string) $buyerEmail, [
+            'order_number' => (string) $order['number'],
+            'customer_name' => (string) ($address['recipient_name'] ?? 'Customer'),
+            'status' => ucfirst(str_replace('_', ' ', $status)),
+            'carrier' => (string) ($shipment['carrier'] ?? ''),
+            'waybill_number' => (string) ($shipment['waybill_number'] ?? ''),
+            'rider_name' => (string) ($shipment['rider_name'] ?? ''),
+            'rider_phone' => (string) ($shipment['rider_phone'] ?? ''),
+            'order_url' => $store['order_url'],
+            'tracking_url' => $store['tracking_url'],
+            'store_name' => $store['store_name'],
+        ], [
+            'order_id' => (int) $order['id'],
+            'customer_id' => (int) ($order['customer_id'] ?? 0),
+        ]);
+    }
+
     private function isEmail(?string $email): bool
     {
         return $email !== null && filter_var($email, FILTER_VALIDATE_EMAIL) !== false;

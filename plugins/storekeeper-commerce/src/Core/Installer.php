@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace StoreKeeper\Commerce\Core;
 
+use StoreKeeper\Commerce\Core\Audit\Actor;
+use StoreKeeper\Commerce\Core\Audit\DatabaseAuditLogger;
 use StoreKeeper\Commerce\Core\Database\Connection;
+use StoreKeeper\Commerce\Shipping\ShippingRepository;
+use StoreKeeper\Commerce\Shipping\ShippingService;
 
 /**
  * Plugin activation work (§7.3): run pending migrations, register the store
@@ -26,6 +30,14 @@ final class Installer
         $applied = (new SchemaMigrator($this->db, $this->migrationsRoot))->migrateAll();
 
         self::registerRoles();
+
+        // §13.3: a fresh store can take an order. A catch-all zone and a free
+        // pickup method appear once; delivery fees stay the merchant's to set.
+        $clock = new SystemClock();
+        (new ShippingService(
+            new ShippingRepository($this->db),
+            new DatabaseAuditLogger($this->db, $clock)
+        ))->seedDefaults(Actor::system());
 
         if (function_exists('update_option')) {
             update_option(Brand::SCHEMA_VERSION_OPTION, self::schemaVersion());

@@ -15,9 +15,13 @@ if ($order === null) {
     return;
 }
 
-$items = \StoreKeeper\Commerce\Core\Plugin::container()
+$container = \StoreKeeper\Commerce\Core\Plugin::container();
+$items = $container
     ->get(\StoreKeeper\Commerce\Orders\OrderService::class)
     ->items((int) $order['id']);
+$shipments = $container
+    ->get(\StoreKeeper\Commerce\Orders\ShipmentService::class)
+    ->forOrder((int) $order['id']);
 
 $address = $order['shipping_address'] !== null
     ? json_decode((string) $order['shipping_address'], true)
@@ -46,6 +50,7 @@ get_header();
     </p>
 
     <div class="skf-received__layout">
+        <div>
         <section class="skf-panel" aria-labelledby="skf-received-items">
             <h2 id="skf-received-items" class="skf-panel__title">What you ordered</h2>
 
@@ -79,6 +84,9 @@ get_header();
                 </div>
             </dl>
         </section>
+
+        <?php require __DIR__ . '/parts/shipments.php'; ?>
+        </div>
 
         <aside class="skf-panel">
             <h2 class="skf-panel__title">Payment</h2>

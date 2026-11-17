@@ -97,6 +97,18 @@ add_action('plugins_loaded', static function (): void {
             $container->get(\StoreKeeper\Commerce\Orders\OrderRepository::class),
             $container->get(\StoreKeeper\Commerce\Customers\CustomerService::class),
             $container->get(\StoreKeeper\Commerce\Payments\PaymentService::class),
+            $api,
+            $container->get(\StoreKeeper\Commerce\Orders\ShipmentService::class)
+        ))->register();
+
+        (new \StoreKeeper\Commerce\Rest\ShipmentController(
+            $container->get(\StoreKeeper\Commerce\Orders\ShipmentService::class),
+            $container->get(\StoreKeeper\Commerce\Orders\OrderService::class),
+            $api
+        ))->register();
+
+        (new \StoreKeeper\Commerce\Rest\ShippingController(
+            $container->get(\StoreKeeper\Commerce\Shipping\ShippingService::class),
             $api
         ))->register();
 

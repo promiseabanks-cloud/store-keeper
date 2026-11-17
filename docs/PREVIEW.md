@@ -201,6 +201,32 @@ so run it per command rather than relying on a server started earlier:
 tools/preview/run-tests.sh
 ```
 
+## Shipping and tracking in the preview
+
+`ShippingService::seedDefaults()` runs on activation, but the existing preview store
+was seeded on 2026-11-17 by hand through WP-CLI, so it carries demo data that is
+**not** part of the code:
+
+```bash
+wp eval '$c=\StoreKeeper\Commerce\Core\Plugin::container();
+  $s=$c->get(\StoreKeeper\Commerce\Shipping\ShippingService::class);
+  $a=\StoreKeeper\Commerce\Core\Audit\Actor::system();
+  $z=$s->createZone(["name"=>"Lagos","areas"=>[["state"=>"Lagos","lga"=>null]],"sort_order"=>10],$a);
+  $s->createMethod(["zone_id"=>(int)$z["id"],"name"=>"Lagos same-day rider","type"=>"flat","config"=>["amount_kobo"=>250000]],$a);
+  $s->createMethod(["zone_id"=>null,"name"=>"Pick up at the shop","type"=>"pickup","config"=>[]],$a);' \
+  --url=https://<preview-host>/ladies-corner
+```
+
+With that data, `/checkout/` shows pickup always and the Lagos rider option once
+the state/LGA fields say Lagos (`/checkout/?state=Lagos&lga=Ikeja`). A state with
+no zone and no catch-all shows pickup only. `wp rewrite flush` is required once
+after deploying the new `track/` rewrite rule.
+
+Order `SK-00002` in the preview has one parcel packed and dispatched (GIG Logistics,
+waybill `GIG-7781`, rider Musa `08035550000`), so
+`/track/SK-00002/?t={public_token}` renders a three-step timeline and
+`/track/SK-00002/` without the token is a 404.
+
 ## Known gaps in this environment
 
 - Only the `ladies-corner` subsite is seeded; the main site's store tables
