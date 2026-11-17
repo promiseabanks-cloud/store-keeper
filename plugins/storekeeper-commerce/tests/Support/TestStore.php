@@ -28,6 +28,8 @@ use StoreKeeper\Commerce\Notifications\MessageLogRepository;
 use StoreKeeper\Commerce\Notifications\MessageService;
 use StoreKeeper\Commerce\Notifications\MessageTemplateRepository;
 use StoreKeeper\Commerce\Notifications\OrderNotifications;
+use StoreKeeper\Commerce\Storefront\StorefrontAccount;
+use StoreKeeper\Commerce\Storefront\StorefrontRegistration;
 use StoreKeeper\Commerce\Orders\OrderRepository;
 use StoreKeeper\Commerce\Orders\OrderService;
 use StoreKeeper\Commerce\Pricing\PricingRepository;
@@ -81,6 +83,10 @@ final class TestStore
     public CartService $cart;
 
     public CheckoutService $checkout;
+
+    public StorefrontRegistration $registration;
+
+    public StorefrontAccount $account;
 
     public MessageTemplateRepository $templateRepository;
 
@@ -169,6 +175,9 @@ final class TestStore
             $this->inventoryRepository,
             $this->clock
         );
+        $this->registration = new StorefrontRegistration($this->customerRepository, $this->customers);
+        $this->account = new StorefrontAccount($this->orderRepository, $this->cart, $this->customerRepository);
+
         $this->templateRepository = new MessageTemplateRepository($db);
         $this->messageLog = new MessageLogRepository($db);
         $this->channel = new InMemoryChannel();

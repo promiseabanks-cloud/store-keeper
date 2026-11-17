@@ -50,6 +50,14 @@ the pages then show wholesale prices (₦6,200 for the gold hoops instead of ₦
 Turn the option off (`option delete storekeeper_otp_show_code`) to see the
 production behaviour, where the code reaches only the PHP error log.
 
+### Trying sign-up
+
+`/register/` works like sign-in: the code is written to the PHP error log and,
+with the two switches above on, shown on the confirm screen. A new number is
+approved immediately in an auto-approval group; switch a group to manual
+approval in the back office to see the pending state and its notice on
+`/account/`.
+
 ### Trying the notification outbox
 
 A preview host has no mail server, so the preview uses the log transport:

@@ -33,6 +33,26 @@ final class CustomerRepository
         );
     }
 
+    /**
+     * Groups a shopper may choose at sign-up (§11.1).
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function selfRegisterableGroups(): array
+    {
+        return $this->db->select(
+            sprintf(
+                'SELECT g.*, p.name AS price_list_name
+                   FROM %scustomer_groups g
+                   LEFT JOIN %sprice_lists p ON p.id = g.price_list_id
+                  WHERE g.is_self_registerable = 1
+                  ORDER BY g.id ASC',
+                $this->db->prefix(),
+                $this->db->prefix()
+            )
+        );
+    }
+
     /** @return array<string,mixed>|null */
     public function defaultGroup(): ?array
     {

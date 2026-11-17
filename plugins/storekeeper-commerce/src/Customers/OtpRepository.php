@@ -33,6 +33,15 @@ final class OtpRepository
         );
     }
 
+    /** The latest code for one purpose, so a sign-in code cannot confirm a sign-up. */
+    public function latestFor(string $phoneE164, string $purpose): ?array
+    {
+        return $this->db->first(
+            sprintf('SELECT * FROM %sotp_codes WHERE phone_e164 = ? AND purpose = ? ORDER BY id DESC LIMIT 1', $this->db->prefix()),
+            [$phoneE164, $purpose]
+        );
+    }
+
     public function countForPhoneSince(string $phoneE164, string $since): int
     {
         return (int) $this->db->scalar(

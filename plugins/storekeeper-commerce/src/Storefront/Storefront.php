@@ -39,6 +39,7 @@ final class Storefront
 
         CartActions::register();
         AuthActions::register();
+        AccountActions::register();
 
         add_filter('template_include', static function (string $template): string {
             return self::template((string) get_query_var(self::VIEW), $template);
@@ -84,6 +85,8 @@ final class Storefront
         add_rewrite_rule('^product/([^/]+)/?$', 'index.php?' . self::VIEW . '=product&' . self::PRODUCT . '=$matches[1]', 'top');
         add_rewrite_rule('^product-category/([^/]+)/?$', 'index.php?' . self::VIEW . '=category&' . self::CATEGORY . '=$matches[1]', 'top');
         add_rewrite_rule('^sign-in/?$', 'index.php?' . self::VIEW . '=signin', 'top');
+        add_rewrite_rule('^register/?$', 'index.php?' . self::VIEW . '=register', 'top');
+        add_rewrite_rule('^account/?$', 'index.php?' . self::VIEW . '=account', 'top');
         add_rewrite_rule('^cart/?$', 'index.php?' . self::VIEW . '=cart', 'top');
         add_rewrite_rule('^checkout/?$', 'index.php?' . self::VIEW . '=checkout', 'top');
         add_rewrite_rule(
@@ -109,12 +112,20 @@ final class Storefront
             'cart' => $root . 'cart.php',
             'checkout' => $root . 'checkout.php',
             'signin' => $root . 'sign-in.php',
+            'register' => $root . 'register.php',
+            'account' => $root . 'account.php',
             'received' => $root . 'order-received.php',
             default => null,
         };
 
         if ($file === null || !is_file($file)) {
             return $fallback;
+        }
+
+        // The account screen is private; a guest starts at sign-in.
+        if ($view === 'account' && self::customer() === null) {
+            wp_safe_redirect(home_url('/sign-in/'));
+            exit;
         }
 
         if ($view === 'product' && self::currentProduct() === null) {
@@ -228,6 +239,16 @@ final class Storefront
         );
     }
 
+    public static function accountUrl(): string
+    {
+        return home_url('/account/');
+    }
+
+    public static function registerUrl(): string
+    {
+        return home_url('/register/');
+    }
+
     public static function cartUrl(): string
     {
         return home_url('/cart/');
@@ -264,6 +285,10 @@ final class Storefront
             $parts['title'] = 'Your cart';
         } elseif ($viewName === 'signin') {
             $parts['title'] = 'Sign in';
+        } elseif ($viewName === 'register') {
+            $parts['title'] = 'Create an account';
+        } elseif ($viewName === 'account') {
+            $parts['title'] = 'Your account';
         } elseif ($viewName === 'checkout') {
             $parts['title'] = 'Checkout';
         } elseif ($viewName === 'received') {

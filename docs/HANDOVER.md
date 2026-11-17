@@ -28,7 +28,7 @@ The brief schedules six phases (§22.2–§22.7). Implemented so far:
 | §22.2 Phase 1 — Foundation | **Done** | Core constants, money, phone, DB abstraction, schema + migrations, capabilities, REST conventions, WP-CLI, CI. |
 | §22.3 Phase 2 — Back office | **Done** | Catalog, pricing resolution, stock ledger with reservations, orders, customers, back-office app shell and its read/write APIs. |
 | §22.4 Phase 3 — Orders, payments, notifications | **Payments, hold expiry and email notifications done; the rest not** | Paystack, Flutterwave and OPay adapters, payment links and signed webhooks are shipped (OPay cannot go live without the merchant ID, Q-001b; no real charge has ever been made). Hold expiry runs hourly and via `wp storekeeper orders expire-holds`. Notifications: templates, outbox in `message_log`, order buyer/staff emails, hourly dispatch and `wp storekeeper messages dispatch`. **Not built:** shipping zones/methods, shipments and public tracking, status bulk actions, WhatsApp/SMS adapters, message templates screen, message log screen, merchant alert delivery. |
-| §22.5 Phase 4 — Storefront | **Partially done (catalogue + cart + checkout + sign-in)** | Theme, `/shop/`, categories, search, product page with swatches and group pricing, block + shortcode, OG/canonical. Cart (`/cart/`), guest/retail checkout (`/checkout/`), phone + OTP sign-in (`/sign-in/`, `skf_session`) and the token-protected order page are shipped; a signed-in wholesale customer checks out at group prices and the order records `customer_id` and the group. **Not built:** a real OTP delivery provider (Q-016), account order history, address book screen, tracking page styling, wholesale registration, product sitemap. |
+| §22.5 Phase 4 — Storefront | **Mostly done (catalogue, cart, checkout, sign-in, sign-up, account)** | Theme, `/shop/`, categories, search, product page with swatches and group pricing, block + shortcode, OG/canonical. Cart (`/cart/`), guest/retail checkout (`/checkout/`), phone + OTP sign-in (`/sign-in/`, `skf_session`), wholesale self-registration (`/register/`, pending approval honoured) and the account page (`/account/`: order history, repeat order, saved addresses) are shipped; a signed-in wholesale customer checks out at group prices and the order records `customer_id` and the group. **Not built:** a real OTP delivery provider (Q-016), editing a saved address from the account page, tracking page styling, product sitemap. |
 | §22.6 Phase 5 — POS + offline sync | **Not started** | Only the tables exist. |
 | §22.7 Phase 6 — Platform layer | **Not started** | `plugins/storekeeper-platform` is a plugin header and nothing else. |
 
@@ -215,6 +215,8 @@ shoppers are not WP users); the seed is not idempotent for locations.
   have no REST identity, and a public write API needs rate limiting first.
 - **Staff screen is read-only** (D-021); people are created on the WP Users screen.
 - **Virtual accounts, refunds and reconciliation are deferred** (D-019).
+- **Sign-up is live but its code is not delivered.** Registration and sign-in use the log sender until a WhatsApp/SMS provider is chosen (Q-016); the preview screen shows the code with the two switches in `PREVIEW.md`.
+- **The account page is read-only** apart from repeating an order: saved addresses come from checkout and cannot be edited there yet.
 - **Notifications are email-only.** `message_log` queues order confirmations and staff alerts and dispatches them hourly, but there is no WhatsApp/SMS adapter (Q-005/Q-006/Q-016) and no screen to edit templates or read the log; both are API/WP-CLI only. A preview host uses the `log` transport because it has no mail server.
 - **Back-office alerts** are read-only panes; there is no notification delivery for them.
 - **The storefront theme is PHP-templated, not a block theme** (D-024), and its
@@ -237,9 +239,11 @@ shoppers are not WP users); the seed is not idempotent for locations.
 
 ## 9. Recommended next step
 
-Email notifications shipped, so an order now confirms itself without a provider.
-Next is the rest of §22.5 (account, addresses, wholesale registration), then
-the WhatsApp/SMS adapters once Q-016 is answered, then shipments and tracking.
+The storefront now covers the whole guest and customer path: browse, cart,
+checkout, register, sign in, account and repeat order. Next are the WhatsApp/SMS
+adapters once Q-016 is answered, the shipping-zone table and shipment tracking,
+then the POS and platform layers. `docs/INTEGRATIONS.md` lists every credential
+still needed and the exact place each one plugs in.
 
 Suggested shape, consistent with what exists:
 

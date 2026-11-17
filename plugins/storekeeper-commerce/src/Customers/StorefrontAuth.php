@@ -64,24 +64,42 @@ final class StorefrontAuth
             return ['phone' => $phone, 'sent' => false];
         }
 
-        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $now = $this->clock->nowString();
-
-        $this->otp->create([
-            'phone_e164' => $phone,
-            'code_hash' => password_hash($code, PASSWORD_BCRYPT),
-            'channel' => 'sms',
-            'purpose' => 'login',
-            'attempts' => 0,
-            'expires_at' => $this->nowPlusMinutes(self::CODE_TTL_MINUTES),
-            'consumed_at' => null,
-            'created_at' => $now,
-            'ip' => $ip,
-        ]);
-
-        $this->sender->send($phone, $code, 'login');
+        $this->issue($phone, 'login', $ip);
 
         return ['phone' => $phone, 'sent' => true];
+    }
+
+    /**
+     * Issue a sign-up code for a number with no account yet (§11.1).
+     *
+     * The customer row is only created after this code is confirmed, so a mistyped
+     * or invented number never becomes a customer.
+     */
+    public function requestRegistration(string $phoneInput, ?string $ip = null): string
+    {
+        $phone = $this->phone($phoneInput);
+
+        if ($this->customers->customerByPhone($phone) !== null) {
+            throw new ValidationFailed(
+                'That number is already registered. Sign in with a code instead.',
+                ['phone' => 'Already registered.']
+            );
+        }
+
+        $this->assertWithinLimits($phone, $ip);
+        $this->issue($phone, 'register', $ip);
+
+        return $phone;
+    }
+
+    /** Confirm a sign-up code; the caller then creates the customer. */
+    public function verifyRegistration(string $phoneInput, string $code): string
+    {
+        $phone = $this->phone($phoneInput);
+
+        $this->check($phone, $code, 'register');
+
+        return $phone;
     }
 
     /**
@@ -92,33 +110,8 @@ final class StorefrontAuth
     public function verify(string $phoneInput, string $code, ?string $ip = null, ?string $userAgent = null): array
     {
         $phone = $this->phone($phoneInput);
-        $code = preg_replace('/\D+/', '', $code) ?? '';
 
-        $row = $this->otp->latest($phone);
-
-        if ($row === null) {
-            throw new ValidationFailed('Ask for a sign-in code first.');
-        }
-
-        if (($row['consumed_at'] ?? null) !== null) {
-            throw new ValidationFailed('That code has already been used. Ask for a new one.');
-        }
-
-        if ((int) $row['attempts'] >= self::MAX_ATTEMPTS) {
-            throw new ValidationFailed('Too many attempts with that code. Ask for a new one.');
-        }
-
-        if ((string) $row['expires_at'] < $this->clock->nowString()) {
-            throw new ValidationFailed('That code has expired. Ask for a new one.');
-        }
-
-        if ($code === '' || !password_verify($code, (string) $row['code_hash'])) {
-            $this->otp->incrementAttempts((int) $row['id']);
-
-            throw new ValidationFailed('That code is not correct.');
-        }
-
-        $this->otp->consume((int) $row['id'], $this->clock->nowString());
+        $this->check($phone, $code, 'login');
 
         $customer = $this->customers->customerByPhone($phone);
 
@@ -126,19 +119,27 @@ final class StorefrontAuth
             throw new ValidationFailed('This number cannot sign in. Please contact the shop.');
         }
 
+        return [
+            'token' => $this->openSession((int) $customer['id'], $ip, $userAgent),
+            'customer' => $customer,
+        ];
+    }
+
+    /** Open a session for a customer; the caller delivers the token to the browser. */
+    public function openSession(int $customerId, ?string $ip = null, ?string $userAgent = null): string
+    {
         $token = bin2hex(random_bytes(32));
-        $now = $this->clock->nowString();
 
         $this->sessions->create([
-            'customer_id' => (int) $customer['id'],
+            'customer_id' => $customerId,
             'token_hash' => hash('sha256', $token),
             'expires_at' => $this->nowPlusDays(self::SESSION_DAYS),
             'ip' => $ip,
             'user_agent' => $userAgent === null ? null : mb_substr($userAgent, 0, 255),
-            'created_at' => $now,
+            'created_at' => $this->clock->nowString(),
         ]);
 
-        return ['token' => $token, 'customer' => $customer];
+        return $token;
     }
 
     /**
@@ -197,6 +198,59 @@ final class StorefrontAuth
     public function signOutEverywhere(int $customerId): void
     {
         $this->sessions->deleteForCustomer($customerId);
+    }
+
+    /** Store a one-time code and hand it to the sender. */
+    private function issue(string $phone, string $purpose, ?string $ip): void
+    {
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        $this->otp->create([
+            'phone_e164' => $phone,
+            'code_hash' => password_hash($code, PASSWORD_BCRYPT),
+            'channel' => 'sms',
+            'purpose' => $purpose,
+            'attempts' => 0,
+            'expires_at' => $this->nowPlusMinutes(self::CODE_TTL_MINUTES),
+            'consumed_at' => null,
+            'created_at' => $this->clock->nowString(),
+            'ip' => $ip,
+        ]);
+
+        $this->sender->send($phone, $code, $purpose);
+    }
+
+    /** Check and consume the latest code for one purpose, or say why not. */
+    private function check(string $phone, string $code, string $purpose): void
+    {
+        $code = preg_replace('/\D+/', '', $code) ?? '';
+        $row = $this->otp->latestFor($phone, $purpose);
+
+        if ($row === null) {
+            throw new ValidationFailed($purpose === 'register'
+                ? 'Ask for a sign-up code first.'
+                : 'Ask for a sign-in code first.');
+        }
+
+        if (($row['consumed_at'] ?? null) !== null) {
+            throw new ValidationFailed('That code has already been used. Ask for a new one.');
+        }
+
+        if ((int) $row['attempts'] >= self::MAX_ATTEMPTS) {
+            throw new ValidationFailed('Too many attempts with that code. Ask for a new one.');
+        }
+
+        if ((string) $row['expires_at'] < $this->clock->nowString()) {
+            throw new ValidationFailed('That code has expired. Ask for a new one.');
+        }
+
+        if ($code === '' || !password_verify($code, (string) $row['code_hash'])) {
+            $this->otp->incrementAttempts((int) $row['id']);
+
+            throw new ValidationFailed('That code is not correct.');
+        }
+
+        $this->otp->consume((int) $row['id'], $this->clock->nowString());
     }
 
     private function phone(string $input): string

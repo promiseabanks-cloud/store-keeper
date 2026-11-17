@@ -132,7 +132,7 @@ get_header();
             </form>
 
             <p class="skf-field__hint">
-                New customer? Ask the shop to add your number, then sign in here.
+                New customer? <a href="<?php echo esc_url(Storefront::registerUrl()); ?>">Create an account</a>.
                 <a href="<?php echo esc_url(Storefront::cartUrl()); ?>">Your cart</a> is kept while you sign in.
             </p>
         </section>

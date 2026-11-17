@@ -83,6 +83,13 @@ computed in the template.
 - The confirmation page is `/order-received/{number}/?token={public_token}`; the
   token is required and is the only way an order is readable without staff auth.
 
+## Sign-up and account (shipped, storefront forms)
+
+| What | How |
+|---|---|
+| `/register/` | Name, phone, "How are you buying?" from self-registerable groups, optional business name/email. Posts to `admin-post.php` action `storekeeper_register_request` (nonce `storekeeper_register_request`), then the 6-digit code posts as `storekeeper_register_verify` (nonce `storekeeper_register_verify`). |
+| `/account/` | Signed-in only; a guest is redirected to `/sign-in/`. Shows the customer's orders with a view link and "Order again" (`storekeeper_reorder`, nonce `storekeeper_reorder`, field `order`), saved addresses and the sign-out form. |
+
 ## Sign-in (shipped, storefront forms)
 
 Customers sign in with a phone number and a one-time code. Customers are not

@@ -40,6 +40,8 @@ use StoreKeeper\Commerce\Notifications\MessageTemplateRepository;
 use StoreKeeper\Commerce\Notifications\OrderNotifications;
 use StoreKeeper\Commerce\Storefront\CatalogView;
 use StoreKeeper\Commerce\Storefront\CustomerContext;
+use StoreKeeper\Commerce\Storefront\StorefrontAccount;
+use StoreKeeper\Commerce\Storefront\StorefrontRegistration;
 use StoreKeeper\Commerce\Storefront\CustomerSession;
 use StoreKeeper\Commerce\Storefront\Otp\LogOtpSender;
 use StoreKeeper\Commerce\Storefront\Otp\OtpSender;
@@ -181,6 +183,18 @@ final class Plugin
         });
         $container->singleton(OrderNotifications::class, static fn (Container $c): OrderNotifications => new OrderNotifications(
             $c->get(MessageService::class)
+        ));
+
+        // Storefront sign-up and the account screen (§11.1): choose a group, and a
+        // manual-approval group leaves the customer pending in the retail group.
+        $container->singleton(StorefrontRegistration::class, static fn (Container $c): StorefrontRegistration => new StorefrontRegistration(
+            $c->get(CustomerRepository::class),
+            $c->get(CustomerService::class)
+        ));
+        $container->singleton(StorefrontAccount::class, static fn (Container $c): StorefrontAccount => new StorefrontAccount(
+            $c->get(OrderRepository::class),
+            $c->get(CartService::class),
+            $c->get(CustomerRepository::class)
         ));
 
         // Storefront sign-in (§22.5): phone + OTP customers own a session cookie.

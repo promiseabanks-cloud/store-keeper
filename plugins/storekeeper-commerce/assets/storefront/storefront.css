@@ -1181,6 +1181,93 @@ button.skf-button {
     margin-top: 14px;
 }
 
+/* Account --------------------------------------------------------------- */
+
+.skf-account__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.skf-account__head .skf-page-title {
+    margin-bottom: 4px;
+}
+
+.skf-orders {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.skf-orders__row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--skf-line);
+}
+
+.skf-orders__row:last-child {
+    border-bottom: 0;
+}
+
+.skf-orders__what strong {
+    display: block;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+}
+
+.skf-orders__what small {
+    color: var(--skf-muted);
+    font-size: 13px;
+}
+
+.skf-orders__total {
+    font-variant-numeric: tabular-nums;
+}
+
+.skf-orders__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+}
+
+.skf-orders__actions form {
+    margin: 0;
+}
+
+.skf-address-list {
+    display: grid;
+    gap: 18px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.skf-address-list strong {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.skf-address-list small {
+    color: var(--skf-muted);
+    font-weight: 400;
+}
+
+.skf-account__foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    margin-top: 24px;
+}
+
 .skf-link {
     padding: 0;
     border: 0;

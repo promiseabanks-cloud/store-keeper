@@ -87,6 +87,28 @@ shipping fee (pickup is free; delivery appears only when
 browser cannot influence the price and two shoppers cannot oversell the last
 piece.
 
+## Creating an account
+
+`/register/` asks for a name, a phone number, and "How are you buying?" — the
+choices are the shop's self-registerable customer groups (§11.1). Choosing a
+wholesale group asks for a business name. The phone is confirmed with a 6-digit
+code before anything is saved, so a mistyped number never becomes a customer.
+
+Approval is the group's own rule. An auto group approves at once and the shopper
+sees its prices immediately. A manual group leaves the account `pending` in the
+retail group, and the account page says so plainly; staff approval moves them to
+the requested group. Codes come from the same sender as sign-in, so the preview
+code and its two switches are the same (see `PREVIEW.md`).
+
+## The account page
+
+`/account/` is for signed-in customers only; a guest is redirected to sign-in. It
+lists the customer's orders (newest first) with the current status, a link to the
+token-protected order page, and "Order again", which refills the cart from that
+order at today's prices and names anything that is no longer available. It also
+shows saved addresses and the sign-out form. Orders belonging to another customer
+cannot be repeated even if the number is guessed.
+
 The checkout form takes an optional email address. It is stored on the order's
 contact details and used for the confirmation message; a signed-in customer's
 stored email is used when the field is left blank. Nothing is sent during the
