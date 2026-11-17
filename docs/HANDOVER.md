@@ -28,7 +28,7 @@ The brief schedules six phases (§22.2–§22.7). Implemented so far:
 | §22.2 Phase 1 — Foundation | **Done** | Core constants, money, phone, DB abstraction, schema + migrations, capabilities, REST conventions, WP-CLI, CI. |
 | §22.3 Phase 2 — Back office | **Done** | Catalog, pricing resolution, stock ledger with reservations, orders, customers, back-office app shell and its read/write APIs. |
 | §22.4 Phase 3 — Orders, payments, notifications | **Payments + hold expiry done, the rest not** | Paystack, Flutterwave and OPay adapters, payment links and signed webhooks are shipped (OPay cannot go live without the merchant ID, Q-001b; no real charge has ever been made). Hold expiry now runs hourly and via `wp storekeeper orders expire-holds`. **Not built:** shipping zones/methods, shipments and public tracking, status bulk actions, the notification template system, WhatsApp/SMS adapters, message log and merchant alerts delivery. |
-| §22.5 Phase 4 — Storefront | **Partially done (catalogue + cart + checkout)** | Theme, `/shop/`, categories, search, product page with swatches and group pricing, block + shortcode, OG/canonical. Cart (`/cart/`), guest/retail checkout (`/checkout/`) and the token-protected order page (`/order-received/{number}/`) are shipped. **Not built:** OTP sign-in, account, addresses in the browser, tracking page styling, wholesale registration, product sitemap. |
+| §22.5 Phase 4 — Storefront | **Partially done (catalogue + cart + checkout + sign-in)** | Theme, `/shop/`, categories, search, product page with swatches and group pricing, block + shortcode, OG/canonical. Cart (`/cart/`), guest/retail checkout (`/checkout/`), phone + OTP sign-in (`/sign-in/`, `skf_session`) and the token-protected order page are shipped; a signed-in wholesale customer checks out at group prices and the order records `customer_id` and the group. **Not built:** a real OTP delivery provider (Q-016), account order history, address book screen, tracking page styling, wholesale registration, product sitemap. |
 | §22.6 Phase 5 — POS + offline sync | **Not started** | Only the tables exist. |
 | §22.7 Phase 6 — Platform layer | **Not started** | `plugins/storekeeper-platform` is a plugin header and nothing else. |
 
@@ -203,10 +203,14 @@ shoppers are not WP users); the seed is not idempotent for locations.
 
 ## 7. Deliberate limitations right now
 
-- **No storefront sign-in.** `Storefront/CustomerContext` reads a customer from the
-  `storekeeper/storefront/customer` filter and otherwise returns null (guest). The
-  pricing path is real and tested (guest vs wholesale), but a visitor cannot yet
-  become a wholesale customer in the browser, so wholesale checkout is not usable.
+- **No OTP delivery provider.** Sign-in itself works and is tested end to end, but
+  `OtpSender` has only the log implementation: a code reaches the PHP error log and,
+  behind two preview switches, the preview screen. Shoppers cannot receive a code
+  until Q-016 (WhatsApp vs SMS, sender number) is answered and one adapter is
+  written.
+- **No storefront registration or account area.** Staff create customers and the
+  approval queue exists, but a visitor cannot apply as a wholesaler from the shop,
+  browse past orders or manage addresses.
 - **Cart and checkout are server-rendered form posts, not REST** (D-028). Guests
   have no REST identity, and a public write API needs rate limiting first.
 - **Staff screen is read-only** (D-021); people are created on the WP Users screen.
@@ -232,8 +236,9 @@ shoppers are not WP users); the seed is not idempotent for locations.
 
 ## 9. Recommended next step
 
-Continue §22.5 with **OTP sign-in and the account area**, then §22.4 notifications
-(needed for OTP delivery).
+Sign-in shipped; the account area (order history, addresses) and wholesale
+registration are the rest of §22.5. OTP delivery still needs the owner's channel
+choice (Q-016), so the notification adapters from §22.4 come next.
 
 Suggested shape, consistent with what exists:
 

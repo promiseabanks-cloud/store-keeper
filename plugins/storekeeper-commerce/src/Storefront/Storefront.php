@@ -38,6 +38,7 @@ final class Storefront
         });
 
         CartActions::register();
+        AuthActions::register();
 
         add_filter('template_include', static function (string $template): string {
             return self::template((string) get_query_var(self::VIEW), $template);
@@ -82,6 +83,7 @@ final class Storefront
         add_rewrite_rule('^shop/page/([0-9]+)/?$', 'index.php?' . self::VIEW . '=shop&' . self::PAGE . '=$matches[1]', 'top');
         add_rewrite_rule('^product/([^/]+)/?$', 'index.php?' . self::VIEW . '=product&' . self::PRODUCT . '=$matches[1]', 'top');
         add_rewrite_rule('^product-category/([^/]+)/?$', 'index.php?' . self::VIEW . '=category&' . self::CATEGORY . '=$matches[1]', 'top');
+        add_rewrite_rule('^sign-in/?$', 'index.php?' . self::VIEW . '=signin', 'top');
         add_rewrite_rule('^cart/?$', 'index.php?' . self::VIEW . '=cart', 'top');
         add_rewrite_rule('^checkout/?$', 'index.php?' . self::VIEW . '=checkout', 'top');
         add_rewrite_rule(
@@ -106,6 +108,7 @@ final class Storefront
             'product' => $root . 'product.php',
             'cart' => $root . 'cart.php',
             'checkout' => $root . 'checkout.php',
+            'signin' => $root . 'sign-in.php',
             'received' => $root . 'order-received.php',
             default => null,
         };
@@ -259,6 +262,8 @@ final class Storefront
             $parts['title'] = 'Shop';
         } elseif ($viewName === 'cart') {
             $parts['title'] = 'Your cart';
+        } elseif ($viewName === 'signin') {
+            $parts['title'] = 'Sign in';
         } elseif ($viewName === 'checkout') {
             $parts['title'] = 'Checkout';
         } elseif ($viewName === 'received') {

@@ -270,6 +270,92 @@ final class CartService
     }
 
     /**
+     * Attach the browsing cart to the customer who just signed in, folding in
+     * any active cart they left on another device.
+     *
+     * The browser's own cookie keeps working; the other cart rows are emptied and
+     * marked abandoned. Quantities are capped at what is in stock rather than
+     * refused, because a merge happens without a shopper watching it.
+     *
+     * @param array<string,mixed> $cart
+     * @return array<string,mixed>
+     */
+    public function claim(array $cart, int $customerId): array
+    {
+        $cart = $this->active($cart);
+
+        foreach ($this->carts->activeForCustomer($customerId) as $other) {
+            if ((int) $other['id'] === (int) $cart['id']) {
+                continue;
+            }
+
+            foreach ($this->carts->items((int) $other['id']) as $line) {
+                $this->mergeLine($cart, $line);
+            }
+
+            $this->carts->clear((int) $other['id']);
+            $this->carts->update((int) $other['id'], ['status' => 'abandoned']);
+        }
+
+        $this->carts->update((int) $cart['id'], [
+            'customer_id' => $customerId,
+            'expires_at' => $this->expiry(),
+            'updated_at' => $this->clock->nowString(),
+        ]);
+
+        return $this->refresh($cart);
+    }
+
+    /** @param array<string,mixed> $cart @param array<string,mixed> $line */
+    private function mergeLine(array $cart, array $line): void
+    {
+        $variantId = (int) $line['variant_id'];
+        $packUnitId = (int) $line['pack_unit_id'];
+
+        try {
+            $this->assertSellable($variantId);
+        } catch (ValidationFailed) {
+            return;
+        }
+
+        $existing = $this->carts->line((int) $cart['id'], $variantId, $packUnitId);
+        $wanted = (int) $line['qty'] + ($existing === null ? 0 : (int) $existing['qty']);
+        $qty = $this->fits($variantId, $packUnitId, $wanted);
+
+        if ($qty < 1) {
+            return;
+        }
+
+        if ($existing === null) {
+            $this->carts->insertLine([
+                'cart_id' => (int) $cart['id'],
+                'variant_id' => $variantId,
+                'pack_unit_id' => $packUnitId,
+                'qty' => $qty,
+                'added_at' => $this->clock->nowString(),
+            ]);
+
+            return;
+        }
+
+        $this->carts->updateQty((int) $existing['id'], $qty);
+    }
+
+    /** The largest quantity of a variant/pack the shelf can supply right now. */
+    private function fits(int $variantId, int $packUnitId, int $wanted): int
+    {
+        $available = $this->inventory->availableOnline($variantId);
+
+        if ($packUnitId === 0) {
+            return max(0, min($wanted, $available));
+        }
+
+        $pieces = max(1, (int) ($this->catalog->packUnit($packUnitId)['pieces'] ?? 1));
+
+        return max(0, min($wanted, intdiv($available, $pieces)));
+    }
+
+    /**
      * A write to a cart that has already been converted reopens it first.
      *
      * @param array<string,mixed> $cart

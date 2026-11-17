@@ -30,8 +30,25 @@ The preview also sets two storefront options the cart/checkout tests rely on:
 free pickup) and `storekeeper_bank_details` (shown on the order confirmation).
 Clear the first option to see checkout with pickup only.
 
-Storefront routes: `/ladies-corner/cart/`, `/ladies-corner/checkout/` and
-`/ladies-corner/order-received/{number}/?token=…`.
+Storefront routes: `/ladies-corner/sign-in/`, `/ladies-corner/cart/`,
+`/ladies-corner/checkout/` and `/ladies-corner/order-received/{number}/?token=…`.
+
+### Trying sign-in
+
+No SMS or WhatsApp provider is wired yet (Q-016). The preview can show the code on
+screen, but only when **both** switches are on, so it cannot happen by accident on
+a live site:
+
+```bash
+wp --url=https://<preview-host>/ladies-corner option update storekeeper_otp_show_code 1
+# and wp-config.php must define WP_DEBUG as true
+```
+
+Sign in at `/ladies-corner/sign-in/` with the seeded customer's number,
+`0803 123 4567`; the code appears in a “Preview only” notice above the form, and
+the pages then show wholesale prices (₦6,200 for the gold hoops instead of ₦8,500).
+Turn the option off (`option delete storekeeper_otp_show_code`) to see the
+production behaviour, where the code reaches only the PHP error log.
 
 ## Opening the back office
 

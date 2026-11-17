@@ -29,6 +29,11 @@
             <?php endforeach; ?>
         </nav>
 
+        <?php $skfCustomer = skf_customer(); ?>
+        <a class="skf-account-link" href="<?php echo esc_url(home_url('/sign-in/')); ?>">
+            <?php echo $skfCustomer === null ? 'Sign in' : esc_html('Hi, ' . strtok((string) $skfCustomer['name'], ' ')); ?>
+        </a>
+
         <a class="skf-cart-link" href="<?php echo esc_url(home_url('/cart/')); ?>">
             Cart
             <?php $skfCartCount = skf_cart_count(); ?>

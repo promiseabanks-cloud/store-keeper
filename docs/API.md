@@ -83,6 +83,27 @@ computed in the template.
 - The confirmation page is `/order-received/{number}/?token={public_token}`; the
   token is required and is the only way an order is readable without staff auth.
 
+## Sign-in (shipped, storefront forms)
+
+Customers sign in with a phone number and a one-time code. Customers are not
+WordPress users (§7.4), so this is not WordPress auth and no `wp-login.php` cookie
+is involved.
+
+| Action | POST `action` | Fields | Notes |
+|---|---|---|---|
+| Request a code | `storekeeper_otp_request` | `phone` | Always answers the same way, whether or not the number has an account. Refused after 5 codes per phone or 20 per IP in an hour. |
+| Verify a code | `storekeeper_otp_verify` | `code` | Reads the phone from the 10-minute `skf_otp` challenge cookie. Sets the `skf_session` cookie (32 bytes, HTTP-only, Secure, SameSite=Lax). Expired, reused or five-times-wrong codes are refused. |
+| Sign out | `storekeeper_sign_out` | — | Deletes this session row and clears the cookie. |
+
+- Only the SHA-256 of the session token is stored in `{p}customer_sessions`; the
+  session lives 90 days and slides forward once it has less than 30 left.
+- The code is stored as a bcrypt hash, expires after 10 minutes and is single-use.
+- No provider is wired yet (Q-016): `LogOtpSender` writes the code to the PHP error
+  log, and the preview can display it when `WP_DEBUG` and `storekeeper_otp_show_code`
+  are both on. The sign-in page never claims an SMS or WhatsApp message was sent.
+- A signed-in customer's group prices apply to the shop, the cart and checkout; the
+  order records `customer_id` and the group used at order time.
+
 ## Payments (shipped)
 
 | Method | Path | Auth | Notes |

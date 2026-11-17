@@ -19,6 +19,9 @@ use StoreKeeper\Commerce\Core\Uuid;
 use StoreKeeper\Commerce\Checkout\CheckoutService;
 use StoreKeeper\Commerce\Customers\CustomerRepository;
 use StoreKeeper\Commerce\Customers\CustomerService;
+use StoreKeeper\Commerce\Customers\CustomerSessionRepository;
+use StoreKeeper\Commerce\Customers\OtpRepository;
+use StoreKeeper\Commerce\Customers\StorefrontAuth;
 use StoreKeeper\Commerce\Inventory\InventoryRepository;
 use StoreKeeper\Commerce\Inventory\InventoryService;
 use StoreKeeper\Commerce\Orders\OrderRepository;
@@ -56,6 +59,14 @@ final class TestStore
     public CustomerRepository $customerRepository;
 
     public CustomerService $customers;
+
+    public OtpRepository $otpRepository;
+
+    public CustomerSessionRepository $sessionRepository;
+
+    public InMemoryOtpSender $otpSender;
+
+    public StorefrontAuth $auth;
 
     public OrderRepository $orderRepository;
 
@@ -108,6 +119,17 @@ final class TestStore
             $this->pricingRepository,
             $this->hooks,
             $this->audit,
+            $this->clock
+        );
+
+        $this->otpRepository = new OtpRepository($db);
+        $this->sessionRepository = new CustomerSessionRepository($db);
+        $this->otpSender = new InMemoryOtpSender();
+        $this->auth = new StorefrontAuth(
+            $this->otpRepository,
+            $this->sessionRepository,
+            $this->customerRepository,
+            $this->otpSender,
             $this->clock
         );
 

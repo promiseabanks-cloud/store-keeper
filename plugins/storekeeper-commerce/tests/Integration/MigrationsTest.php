@@ -61,7 +61,12 @@ final class MigrationsTest extends TestCase
     {
         $store = TestStore::create();
         $first = $store->db->select(sprintf('SELECT migration FROM %sschema_migrations', $store->db->prefix()));
-        self::assertCount(7, $first);
+        $files = glob(dirname(__DIR__, 2) . '/migrations/store/*.php') ?: [];
+        self::assertCount(count($files), $first, 'Every migration file is applied exactly once');
+
+        self::assertCount(1, $store->db->select(
+            sprintf("SHOW COLUMNS FROM %sotp_codes LIKE 'ip'", $store->db->prefix())
+        ), 'OTP rate limiting records the requesting address');
 
         // Running the migrator again is a no-op, as it is on plugin activation.
         $again = (new \StoreKeeper\Commerce\Core\SchemaMigrator($store->db, dirname(__DIR__, 2) . '/migrations'))->migrateAll();

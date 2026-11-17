@@ -47,6 +47,24 @@ final class CartRepository
         $this->db->update($this->db->prefix() . 'carts', $data, ['id' => $cartId]);
     }
 
+    /**
+     * Active carts a customer already owns, used to merge them on sign-in.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function activeForCustomer(int $customerId): array
+    {
+        return $this->db->select(
+            sprintf(
+                "SELECT * FROM %scarts
+                  WHERE customer_id = ? AND status = 'active'
+                  ORDER BY id ASC",
+                $this->db->prefix()
+            ),
+            [$customerId]
+        );
+    }
+
     /** @return list<array<string,mixed>> */
     public function items(int $cartId): array
     {

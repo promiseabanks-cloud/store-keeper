@@ -33,6 +33,16 @@ function skf_shop_url(): string
     return home_url('/shop/');
 }
 
+/** The signed-in storefront customer, or null for a guest. */
+function skf_customer(): ?array
+{
+    if (!class_exists(\StoreKeeper\Commerce\Storefront\Storefront::class)) {
+        return null;
+    }
+
+    return \StoreKeeper\Commerce\Storefront\Storefront::customer();
+}
+
 /** Items in this visitor's cart; 0 when the commerce plugin is not active. */
 function skf_cart_count(): int
 {

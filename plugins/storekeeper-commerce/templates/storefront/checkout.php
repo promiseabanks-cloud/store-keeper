@@ -35,6 +35,17 @@ get_header();
         <p class="skf-notice skf-notice--error" role="alert"><?php echo esc_html($flash); ?></p>
     <?php endif; ?>
 
+    <?php if ($customer !== null) : ?>
+        <p class="skf-notice skf-notice--info" role="status">
+            Signed in as <?php echo esc_html((string) $customer['name']); ?> — your group's prices are applied.
+        </p>
+    <?php else : ?>
+        <p class="skf-field__hint">
+            A wholesale customer?
+            <a href="<?php echo esc_url(home_url('/sign-in/')); ?>">Sign in</a> to check out at your own prices.
+        </p>
+    <?php endif; ?>
+
     <?php if ($summary === null || $summary['lines'] === []) : ?>
         <div class="skf-empty">
             <p>There is nothing to check out.</p>

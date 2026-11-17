@@ -1134,3 +1134,60 @@ button.skf-button {
         margin-top: 48px;
     }
 }
+
+/* Sign in ---------------------------------------------------------------- */
+
+.skf-account-link {
+    color: var(--skf-ink);
+    text-decoration: none;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.skf-account-link:hover {
+    text-decoration: underline;
+}
+
+.skf-notice--info {
+    border-color: var(--skf-line);
+    background: #f3f1ea;
+    color: var(--skf-ink);
+}
+
+.skf-auth {
+    max-width: 560px;
+}
+
+.skf-auth .skf-panel {
+    margin-bottom: 24px;
+}
+
+.skf-auth .skf-button {
+    display: inline-flex;
+    justify-content: center;
+}
+
+.skf-auth__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    margin: 18px 0;
+}
+
+.skf-auth__resend {
+    margin-top: 14px;
+}
+
+.skf-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--skf-muted);
+    font: inherit;
+    font-size: 13px;
+    text-decoration: underline;
+    cursor: pointer;
+}

@@ -37,6 +37,34 @@ sign-in (§11.5). Today it returns the row supplied through the
 
 The filter is one line to wire when sign-in lands; no template changes.
 
+## Sign-in
+
+Customers sign in at `/sign-in/` with the phone number the shop has on file and a
+6-digit code. Two server-rendered steps, no JavaScript:
+
+1. `storekeeper_otp_request` checks the number and the rate limits, stores a
+   bcrypt hash of the code and calls `OtpSender::send()`.
+2. `storekeeper_otp_verify` reads the pending number from the `skf_otp` cookie
+   (10 minutes, HTTP-only) and opens a session: `skf_session` holds 32 random bytes,
+   the database only their SHA-256. 90 days, sliding forward while in use.
+
+`CustomerContext` resolves the cookie, so every price on the shop, in the cart and
+at checkout resolves through `PricingService` with that customer — an approved
+wholesale customer sees wholesale prices immediately. Checkout attaches
+`customer_id` to the order, so the group used is recorded with the order.
+
+A cart picked up while signed out is attached to the customer at sign-in; an active
+cart from another device is folded in, capped at available stock (D-031).
+
+> **Delivery is not wired yet.** Q-005 (WhatsApp route) and Q-006 (SMS provider)
+> are unanswered, so `LogOtpSender` writes the code to the PHP error log. The
+> preview shows it on screen when `WP_DEBUG` and `storekeeper_otp_show_code` are
+> both on; never enable that option in production (D-030).
+
+Not built in this increment: wholesale registration from the storefront (staff
+create customers, and the approval queue already exists), account order history,
+and the address book (the services exist; there is no screen).
+
 ## Cart and checkout
 
 A visitor's cart is identified by a 32-byte token in the `skf_cart` cookie (only
@@ -121,7 +149,8 @@ each colour value. It is preview tooling, not part of the plugin.
 
 ## Not done yet
 
-- Storefront sign-in (OTP), account, addresses, order tracking page.
+- Wholesale registration form, account order history, address book screen,
+  order tracking page. (Sign-in itself is shipped; see above.)
 - Shipping zones and calculated delivery (checkout offers pickup + one flat fee).
 - Public REST endpoints for cart/checkout (D-028); the forms are the supported path.
 - Wholesale registration form.

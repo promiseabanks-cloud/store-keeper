@@ -17,6 +17,9 @@ use StoreKeeper\Commerce\Core\Idempotency\IdempotencyService;
 use StoreKeeper\Commerce\Checkout\CheckoutService;
 use StoreKeeper\Commerce\Customers\CustomerRepository;
 use StoreKeeper\Commerce\Customers\CustomerService;
+use StoreKeeper\Commerce\Customers\CustomerSessionRepository;
+use StoreKeeper\Commerce\Customers\OtpRepository;
+use StoreKeeper\Commerce\Customers\StorefrontAuth;
 use StoreKeeper\Commerce\Inventory\InventoryRepository;
 use StoreKeeper\Commerce\Inventory\InventoryService;
 use StoreKeeper\Commerce\Orders\OrderRepository;
@@ -31,6 +34,9 @@ use StoreKeeper\Commerce\Pricing\PricingService;
 use StoreKeeper\Commerce\Reports\OverviewService;
 use StoreKeeper\Commerce\Storefront\CatalogView;
 use StoreKeeper\Commerce\Storefront\CustomerContext;
+use StoreKeeper\Commerce\Storefront\CustomerSession;
+use StoreKeeper\Commerce\Storefront\Otp\LogOtpSender;
+use StoreKeeper\Commerce\Storefront\Otp\OtpSender;
 
 /**
  * Builds the engine container for the current site (§6.1, §7.3).
@@ -146,8 +152,30 @@ final class Plugin
             $c->get(Connection::class)
         ));
 
+        // Storefront sign-in (§22.5): phone + OTP customers own a session cookie.
+        $container->singleton(OtpRepository::class, static fn (Container $c): OtpRepository => new OtpRepository(
+            $c->get(Connection::class)
+        ));
+        $container->singleton(CustomerSessionRepository::class, static fn (Container $c): CustomerSessionRepository => new CustomerSessionRepository(
+            $c->get(Connection::class)
+        ));
+        $container->singleton(OtpSender::class, static function (): OtpSender {
+            $sender = apply_filters(Brand::hook('otp/sender'), new LogOtpSender());
+
+            return $sender instanceof OtpSender ? $sender : new LogOtpSender();
+        });
+        $container->singleton(StorefrontAuth::class, static fn (Container $c): StorefrontAuth => new StorefrontAuth(
+            $c->get(OtpRepository::class),
+            $c->get(CustomerSessionRepository::class),
+            $c->get(CustomerRepository::class),
+            $c->get(OtpSender::class),
+            $c->get(Clock::class)
+        ));
+
         // Storefront read model (§22.5): prices always resolve through the engine.
-        $container->singleton(CustomerContext::class, static fn (): CustomerContext => new CustomerContext());
+        $container->singleton(CustomerContext::class, static fn (): CustomerContext => new CustomerContext(
+            static fn (): ?array => CustomerSession::current()
+        ));
         $container->singleton(CatalogView::class, static fn (Container $c): CatalogView => new CatalogView(
             $c->get(CatalogRepository::class),
             $c->get(PricingService::class),
