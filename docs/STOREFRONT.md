@@ -46,7 +46,13 @@ request. Adding more than the ledger holds is refused with "Only N left"; a pric
 change, a tier change or a sold-out variant is visible immediately.
 
 The cart and checkout pages are ordinary forms (`admin-post.php`, nonce-checked)
-so they work without JavaScript (D-028). Checkout validates the shopper, picks the
+so they work without JavaScript (D-028). WordPress nonces expire after 24 hours
+(12 with the session grace period), so a page left open overnight posts a stale
+nonce. That is handled as ordinary shopper behaviour, not as an attack: the post
+changes nothing, flashes "This page had expired, so the cart was not changed" (or
+"…so the order was not placed" on checkout) and redirects back to a freshly
+rendered form with a new nonce. It never reaches `wp_nonce_ays()`, whose bare
+"link you followed has expired" screen loses the cart's context. Checkout validates the shopper, picks the
 shipping fee (pickup is free; delivery appears only when
 `storekeeper_flat_shipping_kobo` is set), then calls `OrderService::create()` with
 `channel=web`. OrderService re-prices and reserves in one transaction, so a

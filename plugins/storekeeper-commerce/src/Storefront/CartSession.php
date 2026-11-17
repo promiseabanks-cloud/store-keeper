@@ -115,14 +115,22 @@ final class CartSession
         unset($_COOKIE[self::COOKIE]);
     }
 
-    /** A one-shot message for the next cart or checkout page. */
+    /**
+     * A one-shot message for the next cart or checkout page.
+     *
+     * Messages are keyed by the cart token, so a shopper with no cookie yet (an
+     * add-to-cart form that expired before the first successful add) still gets
+     * one: the token is created here and the next request reads the transient.
+     */
     public static function flash(string $message): void
     {
-        $token = self::token();
-
-        if ($token !== null && function_exists('set_transient')) {
-            set_transient('skf_cart_error_' . self::hash($token), $message, 60);
+        if (!function_exists('set_transient')) {
+            return;
         }
+
+        $token = self::token() ?? self::createToken();
+
+        set_transient('skf_cart_error_' . self::hash($token), $message, 60);
     }
 
     public static function takeFlash(): ?string

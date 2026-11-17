@@ -33,7 +33,10 @@ final class CartActions
 
     public static function cart(): void
     {
-        check_admin_referer('storekeeper_cart');
+        self::verifyNonce(
+            'storekeeper_cart',
+            'This page had expired, so the cart was not changed. Please try again.'
+        );
 
         $action = sanitize_key((string) ($_POST['cart_action'] ?? ''));
         $service = Plugin::container()->get(CartService::class);
@@ -70,7 +73,10 @@ final class CartActions
 
     public static function checkout(): void
     {
-        check_admin_referer('storekeeper_checkout');
+        self::verifyNonce(
+            'storekeeper_checkout',
+            'This checkout page had expired, so the order was not placed. Your cart is still here.'
+        );
 
         $token = CartSession::token();
 
@@ -96,6 +102,30 @@ final class CartActions
         }
 
         self::redirect(Storefront::orderUrl($result['order']));
+    }
+
+    /**
+     * WordPress nonces live for 24 hours (12 with the session grace period), so a
+     * page left open overnight is a normal shopper behaviour, not an attack.
+     * `check_admin_referer()` would kill the request with the bare "link you
+     * followed has expired" screen; the visitor's cart is still perfectly valid,
+     * so redirect back to the form with a message instead.
+     */
+    private static function verifyNonce(string $action, string $expiredMessage): void
+    {
+        $nonce = isset($_POST['_wpnonce']) ? sanitize_text_field(wp_unslash((string) $_POST['_wpnonce'])) : '';
+
+        if ($nonce !== '' && wp_verify_nonce($nonce, $action) !== false) {
+            return;
+        }
+
+        CartSession::flash($expiredMessage);
+
+        // The form that expired is on the cart or checkout page; send the shopper
+        // back to a freshly rendered one, never to wp_nonce_ays().
+        self::redirect(($action === 'storekeeper_checkout')
+            ? home_url('/checkout/')
+            : home_url('/cart/'));
     }
 
     private static function redirect(string $url): void

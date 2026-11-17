@@ -117,7 +117,13 @@ Screenshots: `artifacts/cart.png`, `artifacts/checkout.png`,
    reopens a converted/abandoned cart as a clean cart with a **new uuid**, so the
    next order cannot collide with the old idempotency key. Covered by
    `CartTest::testAConvertedCartReopensAsANewCartInsteadOfReusingItsOrder`.
-3. **Preview styling was invisible** (preview config, not plugin code): behind the
+3. **A page left open for more than a day died on a WordPress error screen.** Cart
+   and checkout forms post a nonce, and WordPress nonces expire after 24 hours, so
+   an overnight tab hit `wp_nonce_ays()`'s bare "link you followed has expired"
+   page and lost the shopper's context. The forms now fail soft: nothing is
+   changed, a one-line message is flashed, and the shopper lands back on a freshly
+   rendered cart or checkout page.
+4. **Preview styling was invisible** (preview config, not plugin code): behind the
    TLS proxy WordPress saw a plain-HTTP request and emitted `http://` asset URLs,
    which the browser blocked as mixed content. Marking non-loopback requests as
    HTTPS in `wp-config.php` fixes it; recorded in `docs/PREVIEW.md`.
