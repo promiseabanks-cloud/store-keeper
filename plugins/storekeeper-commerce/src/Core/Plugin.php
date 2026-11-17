@@ -183,8 +183,7 @@ final class Plugin
 
         // Storefront cart and checkout (§22.5, D-026, D-027).
         $container->singleton(CartRepository::class, static fn (Container $c): CartRepository => new CartRepository(
-            $c->get(Connection::class),
-            $c->get(Clock::class)
+            $c->get(Connection::class)
         ));
         $container->singleton(CartService::class, static fn (Container $c): CartService => new CartService(
             $c->get(CartRepository::class),
@@ -198,7 +197,6 @@ final class Plugin
             $c->get(CartService::class),
             $c->get(OrderService::class),
             $c->get(CustomerRepository::class),
-            $c->get(Clock::class),
             (int) get_option(Brand::OPTION_PREFIX . 'flat_shipping_kobo', 0),
             $c->get(GatewayRegistry::class)->configuredSlugs(),
             $c->get(PaymentService::class)

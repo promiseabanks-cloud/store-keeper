@@ -173,7 +173,7 @@ final class CartTest extends TestCase
         $this->store->cart->add($cart, ['variant_id' => $this->variantId, 'qty' => 1], null);
         $this->store->cart->markConverted($cart, 999);
 
-        $reopened = $this->store->cart->add($this->store->cart->findAny(hash('sha256', 'converted-a')), [
+        $reopened = $this->store->cart->add($this->store->cart->find(hash('sha256', 'converted-a')), [
             'variant_id' => $this->variantId,
             'qty' => 2,
         ], null);
@@ -183,8 +183,25 @@ final class CartTest extends TestCase
         self::assertSame(2, $reopened['item_count']);
         self::assertSame(1000000, $reopened['subtotal_kobo']);
 
-        $row = $this->store->cart->findAny(hash('sha256', 'converted-a'));
+        $row = $this->store->cart->find(hash('sha256', 'converted-a'));
         self::assertNull($row['converted_order_id']);
+    }
+
+    public function testAnExpiredCartIsReopenedInsteadOfFailingOnItsToken(): void
+    {
+        $cart = $this->cart('expired-a');
+        $this->store->cart->add($cart, ['variant_id' => $this->variantId, 'qty' => 1], null);
+
+        $this->store->clock->advance('31 days');
+
+        // The token hash is unique, so an expired cart must be reused rather
+        // than inserted again; before this, the shopper got a database error.
+        $reopened = $this->store->cart->open(hash('sha256', 'expired-a'));
+
+        self::assertSame('active', $reopened['status']);
+        self::assertSame((int) $cart['id'], (int) $reopened['id']);
+        self::assertNotSame((string) $cart['uuid'], (string) $reopened['uuid']);
+        self::assertSame(0, $this->store->cart->lineCount($reopened));
     }
 
     /** @return array<string,mixed> */

@@ -7,7 +7,6 @@ namespace StoreKeeper\Commerce\Checkout;
 use StoreKeeper\Commerce\Cart\CartRepository;
 use StoreKeeper\Commerce\Cart\CartService;
 use StoreKeeper\Commerce\Core\Audit\Actor;
-use StoreKeeper\Commerce\Core\Clock;
 use StoreKeeper\Commerce\Core\Exception\ValidationFailed;
 use StoreKeeper\Commerce\Core\Money;
 use StoreKeeper\Commerce\Core\Phone;
@@ -38,7 +37,6 @@ final class CheckoutService
         private readonly CartService $cartService,
         private readonly OrderService $orders,
         private readonly CustomerRepository $customerRepository,
-        private readonly Clock $clock,
         private readonly int $flatShippingKobo = 0,
         private readonly array $gatewaySlugs = [],
         private readonly ?PaymentService $payments = null,
@@ -138,17 +136,12 @@ final class CheckoutService
             throw new ValidationFailed('That phone number does not look right.', ['phone' => 'Use 0803 123 4567.']);
         }
 
-        $options = [];
-        foreach ($this->shippingOptions() as $option) {
-            $options[$option['id']] = $option;
-        }
-
         $shippingId = (string) ($input['shipping'] ?? 'pickup');
-        if (!isset($options[$shippingId])) {
+        $shipping = array_column($this->shippingOptions(), null, 'id')[$shippingId] ?? null;
+
+        if ($shipping === null) {
             throw new ValidationFailed('Choose how you would like to receive the order.', ['shipping' => 'Required.']);
         }
-
-        $shipping = $options[$shippingId];
 
         // Contact details are kept for pickup orders too: it is the only place
         // the order stores who to call when the parcel is ready.
@@ -176,8 +169,7 @@ final class CheckoutService
         }
 
         $paymentMethod = (string) ($input['payment_method'] ?? 'bank_transfer');
-        $paymentMethods = array_column($this->paymentOptions(), 'id');
-        if (!in_array($paymentMethod, $paymentMethods, true)) {
+        if (!in_array($paymentMethod, array_column($this->paymentOptions(), 'id'), true)) {
             throw new ValidationFailed('Choose a payment method.', ['payment_method' => 'Unsupported.']);
         }
 
@@ -198,10 +190,9 @@ final class CheckoutService
             ], static fn ($value): bool => $value !== null);
         }
 
+        // The fingerprint must see the normalised values, not the typed ones.
         $input['name'] = $name;
         $input['phone'] = $phone;
-        $input['shipping'] = $shippingId;
-        $input['payment_method'] = $paymentMethod;
 
         $result = $this->orders->create([
             'channel' => 'web',

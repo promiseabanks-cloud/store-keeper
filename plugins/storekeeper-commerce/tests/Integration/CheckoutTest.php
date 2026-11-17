@@ -49,10 +49,10 @@ final class CheckoutTest extends TestCase
 
         self::assertSame(2, (int) $this->store->inventory->level($this->variantId, $this->locationId)['reserved']);
 
-        $cart = $this->store->cart->findAny($token);
+        $cart = $this->store->cart->find($token);
         self::assertSame('converted', $cart['status']);
         self::assertSame((int) $order['id'], (int) $cart['converted_order_id']);
-        self::assertSame(0, $this->store->cart->lineCount($this->store->cart->findAny($token)));
+        self::assertSame(0, $this->store->cart->lineCount($this->store->cart->find($token)));
     }
 
     public function testASecondSubmitReturnsTheSameOrderAndChargesNothingTwice(): void
@@ -109,7 +109,7 @@ final class CheckoutTest extends TestCase
         self::assertSame(0, (int) $this->store->db->scalar(
             sprintf('SELECT COUNT(*) FROM %sorders', $this->store->db->prefix())
         ));
-        self::assertSame('active', $this->store->cart->findAny($token)['status']);
+        self::assertSame('active', $this->store->cart->find($token)['status']);
     }
 
     public function testStockTakenBetweenCartAndSubmitBlocksCheckoutAndCreatesNothing(): void
@@ -127,7 +127,7 @@ final class CheckoutTest extends TestCase
         self::assertSame(1, (int) $this->store->db->scalar(
             sprintf('SELECT COUNT(*) FROM %sorders', $this->store->db->prefix())
         ), 'Only the other shopper\'s order exists');
-        self::assertSame('active', $this->store->cart->findAny($token)['status']);
+        self::assertSame('active', $this->store->cart->find($token)['status']);
         self::assertSame([], $this->store->inventory->verify());
 
         // The engine still guards the race after the summary: if stock vanishes

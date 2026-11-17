@@ -51,24 +51,20 @@ final class CartService
         return $cart;
     }
 
-    /** @return array<string,mixed>|null the cart whether active or already converted */
-    public function findAny(string $tokenHash): ?array
-    {
-        return $this->carts->byTokenHash($tokenHash);
-    }
-
     /** @return array<string,mixed> */
     public function open(string $tokenHash, ?int $customerId = null): array
     {
-        $cart = $this->find($tokenHash);
+        $cart = $this->carts->byTokenHash($tokenHash);
 
-        if ($cart !== null && $cart['status'] !== 'active') {
+        // A converted cart and an expired one are both reused as a fresh cart;
+        // inserting a second row would collide with the unique token hash.
+        if ($cart !== null && ($cart['status'] !== 'active' || $cart['expires_at'] < $this->clock->nowString())) {
             return $this->reopen($cart, $customerId);
         }
 
         if ($cart !== null) {
             $changes = ['expires_at' => $this->expiry()];
-            if ($customerId !== null && ($cart['customer_id'] === null || (int) $cart['customer_id'] !== $customerId)) {
+            if ($customerId !== null && (int) ($cart['customer_id'] ?? 0) !== $customerId) {
                 $changes['customer_id'] = $customerId;
             }
             $this->carts->update((int) $cart['id'], $changes);
@@ -105,8 +101,10 @@ final class CartService
         $variantIds = [];
         $rows = $this->carts->items((int) $cart['id']);
 
+        $count = 0;
         foreach ($rows as $row) {
             $variantIds[] = (int) $row['variant_id'];
+            $count += (int) $row['qty'];
         }
 
         $stock = $variantIds === [] ? [] : $this->inventory->availableOnlineMany($variantIds);
@@ -120,11 +118,6 @@ final class CartService
             }
 
             $lines[] = $line;
-        }
-
-        $count = 0;
-        foreach ($rows as $row) {
-            $count += (int) $row['qty'];
         }
 
         return [
@@ -148,9 +141,7 @@ final class CartService
      */
     public function add(array $cart, array $input, ?array $customer): array
     {
-        if ($cart['status'] !== 'active') {
-            $cart = $this->reopen($cart, null);
-        }
+        $cart = $this->active($cart);
 
         $variantId = (int) ($input['variant_id'] ?? 0);
         $qty = (int) ($input['qty'] ?? 1);
@@ -197,9 +188,7 @@ final class CartService
      */
     public function setQty(array $cart, int $lineId, int $qty, ?array $customer): array
     {
-        if ($cart['status'] !== 'active') {
-            $cart = $this->reopen($cart, null);
-        }
+        $cart = $this->active($cart);
 
         $line = $this->carts->lineById((int) $cart['id'], $lineId);
 
@@ -230,9 +219,7 @@ final class CartService
      */
     public function remove(array $cart, int $lineId, ?array $customer): array
     {
-        if ($cart['status'] !== 'active') {
-            $cart = $this->reopen($cart, null);
-        }
+        $cart = $this->active($cart);
 
         $line = $this->carts->lineById((int) $cart['id'], $lineId);
 
@@ -280,6 +267,17 @@ final class CartService
         ]);
 
         return $this->carts->byId((int) $cart['id']) ?? throw new \RuntimeException('Cart was not reopened.');
+    }
+
+    /**
+     * A write to a cart that has already been converted reopens it first.
+     *
+     * @param array<string,mixed> $cart
+     * @return array<string,mixed>
+     */
+    private function active(array $cart): array
+    {
+        return $cart['status'] === 'active' ? $cart : $this->reopen($cart, null);
     }
 
     /** @param array<string,mixed> $cart */
@@ -364,6 +362,8 @@ final class CartService
         $sku = $variant === null ? '' : (string) $variant['sku'];
         $slug = $product === null ? null : (string) $product['slug'];
 
+        $pack = $packUnitId === null ? null : $this->catalog->packUnit($packUnitId);
+
         $error = null;
         $amount = null;
         $source = null;
@@ -391,7 +391,7 @@ final class CartService
             'id' => (int) $row['id'],
             'variant_id' => $variantId,
             'pack_unit_id' => $packUnitId,
-            'pack_name' => $packUnitId === null ? null : (string) ($this->catalog->packUnit($packUnitId)['name'] ?? 'pack'),
+            'pack_name' => $packUnitId === null ? null : (string) ($pack['name'] ?? 'pack'),
             'qty' => $qty,
             'product_name' => $name,
             'variant_title' => $title,

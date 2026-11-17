@@ -66,7 +66,9 @@ priced from their group; wholesale checkout therefore needs OTP sign-in, which i
 not built yet.
 
 A converted cart remembers its order, so a repeated submit returns the same order
-instead of charging twice. The confirmation page requires
+instead of charging twice. A converted or 30-day-expired cart is reused as a fresh
+one on the next add, with a new uuid, so the visitor's existing cookie keeps
+working instead of colliding with the token's unique row. The confirmation page requires
 `?token={public_token}` and states the payment status honestly: bank transfer is
 unpaid until staff confirm it, and the bank details come from the
 `storekeeper_bank_details` option (plain text, line breaks preserved).

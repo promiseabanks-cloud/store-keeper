@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace StoreKeeper\Commerce\Cart;
 
-use StoreKeeper\Commerce\Core\Clock;
 use StoreKeeper\Commerce\Core\Database\Connection;
 
 /**
@@ -15,7 +14,6 @@ final class CartRepository
 {
     public function __construct(
         private readonly Connection $db,
-        private readonly Clock $clock,
     ) {
     }
 
@@ -40,20 +38,6 @@ final class CartRepository
         return $this->db->first(
             sprintf('SELECT * FROM %scarts WHERE id = ? LIMIT 1', $this->db->prefix()),
             [$cartId]
-        );
-    }
-
-    /** @return array<string,mixed>|null */
-    public function activeForCustomer(int $customerId): ?array
-    {
-        return $this->db->first(
-            sprintf(
-                "SELECT * FROM %scarts
-                  WHERE customer_id = ? AND status = 'active' AND expires_at > ?
-                  ORDER BY id DESC LIMIT 1",
-                $this->db->prefix()
-            ),
-            [$customerId, $this->clock->nowString()]
         );
     }
 

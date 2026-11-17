@@ -125,7 +125,7 @@ final class TestStore
             'TEST'
         );
 
-        $this->cartRepository = new CartRepository($db, $this->clock);
+        $this->cartRepository = new CartRepository($db);
         $this->cart = new CartService(
             $this->cartRepository,
             $this->catalogRepository,
@@ -138,7 +138,6 @@ final class TestStore
             $this->cart,
             $this->orders,
             $this->customerRepository,
-            $this->clock,
             $this->flatShippingKobo,
             [],
             null
