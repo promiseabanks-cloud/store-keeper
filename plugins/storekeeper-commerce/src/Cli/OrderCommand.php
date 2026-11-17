@@ -33,14 +33,8 @@ final class OrderCommand
      * @param list<string> $args
      * @param array<string,mixed> $assocArgs
      */
-    public function __invoke(array $args, array $assocArgs): void
+    public function expireHolds(array $args, array $assocArgs): void
     {
-        $command = (string) ($args[0] ?? '');
-
-        if ($command !== 'expire-holds') {
-            \WP_CLI::error('Usage: wp storekeeper orders expire-holds [--limit=<number>]');
-        }
-
         $limit = isset($assocArgs['limit']) ? max(1, (int) $assocArgs['limit']) : 100;
         $result = $this->orders->expireHolds($limit);
 

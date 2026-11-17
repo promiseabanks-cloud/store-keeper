@@ -120,6 +120,7 @@ final class CheckoutService
 
         $name = trim((string) ($input['name'] ?? ''));
         $phoneInput = trim((string) ($input['phone'] ?? ''));
+        $email = $this->email($input['email'] ?? null, $customer);
         $phone = '';
 
         if ($name === '') {
@@ -150,6 +151,12 @@ final class CheckoutService
             'phone_e164' => $phone,
             'method' => $shippingId,
         ];
+
+        // Contact details are kept for pickup orders too: they are the only
+        // place the order stores who to call, and where to email the receipt.
+        if ($email !== null) {
+            $address['email'] = $email;
+        }
 
         if ($shippingId === 'delivery') {
             foreach (['line1' => 'Street address', 'lga' => 'Local government', 'state' => 'State'] as $field => $label) {
@@ -266,6 +273,31 @@ final class CheckoutService
             substr($cartUuid, 0, 8),
             substr(hash('sha256', json_encode($fingerprint, JSON_THROW_ON_ERROR)), 0, 40)
         );
+    }
+
+    /**
+     * An optional buyer email, used for the order confirmation. The customer's
+     * stored email is the fallback, so a signed-in shopper need not retype it.
+     */
+    private function email(mixed $typed, ?array $customer): ?string
+    {
+        $email = $this->clean($typed);
+
+        if ($email === null && $customer !== null) {
+            $email = $this->clean($customer['email'] ?? null);
+        }
+
+        if ($email === null) {
+            return null;
+        }
+
+        $email = strtolower($email);
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new ValidationFailed('That email address does not look right.', ['email' => 'Use name@example.com.']);
+        }
+
+        return $email;
     }
 
     private function clean(mixed $value): ?string

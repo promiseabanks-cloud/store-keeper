@@ -32,11 +32,18 @@ use StoreKeeper\Commerce\Payments\PaymentService;
 use StoreKeeper\Commerce\Pricing\PricingRepository;
 use StoreKeeper\Commerce\Pricing\PricingService;
 use StoreKeeper\Commerce\Reports\OverviewService;
+use StoreKeeper\Commerce\Notifications\EmailChannel;
+use StoreKeeper\Commerce\Notifications\LogChannel;
+use StoreKeeper\Commerce\Notifications\MessageLogRepository;
+use StoreKeeper\Commerce\Notifications\MessageService;
+use StoreKeeper\Commerce\Notifications\MessageTemplateRepository;
+use StoreKeeper\Commerce\Notifications\OrderNotifications;
 use StoreKeeper\Commerce\Storefront\CatalogView;
 use StoreKeeper\Commerce\Storefront\CustomerContext;
 use StoreKeeper\Commerce\Storefront\CustomerSession;
 use StoreKeeper\Commerce\Storefront\Otp\LogOtpSender;
 use StoreKeeper\Commerce\Storefront\Otp\OtpSender;
+use StoreKeeper\Commerce\Storefront\Storefront;
 
 /**
  * Builds the engine container for the current site (§6.1, §7.3).
@@ -152,6 +159,30 @@ final class Plugin
             $c->get(Connection::class)
         ));
 
+        // Notifications (§12): messages are queued in-request and dispatched later.
+        $container->singleton(MessageTemplateRepository::class, static fn (Container $c): MessageTemplateRepository => new MessageTemplateRepository(
+            $c->get(Connection::class)
+        ));
+        $container->singleton(MessageLogRepository::class, static fn (Container $c): MessageLogRepository => new MessageLogRepository(
+            $c->get(Connection::class)
+        ));
+        $container->singleton(MessageService::class, static function (Container $c): MessageService {
+            // `log` is a preview-only transport: it writes to the error log and
+            // counts as delivered, because a preview host has no mail server.
+            $transport = (string) get_option(Brand::OPTION_PREFIX . 'notification_transport', 'email');
+            $channels = ['email' => $transport === 'log' ? new LogChannel() : new EmailChannel()];
+
+            return new MessageService(
+                $c->get(MessageTemplateRepository::class),
+                $c->get(MessageLogRepository::class),
+                $channels,
+                $c->get(Clock::class)
+            );
+        });
+        $container->singleton(OrderNotifications::class, static fn (Container $c): OrderNotifications => new OrderNotifications(
+            $c->get(MessageService::class)
+        ));
+
         // Storefront sign-in (§22.5): phone + OTP customers own a session cookie.
         $container->singleton(OtpRepository::class, static fn (Container $c): OtpRepository => new OtpRepository(
             $c->get(Connection::class)
@@ -247,11 +278,57 @@ final class Plugin
         add_action('storekeeper_expire_holds', static function () use ($container): void {
             $container->get(OrderService::class)->expireHolds(200);
         });
+        // §12.4: the outbox is drained by the same hourly tick.
+        add_action('storekeeper_dispatch_messages', static function () use ($container): void {
+            $container->get(MessageService::class)->dispatch(100);
+        });
         add_action('init', static function (): void {
-            if (function_exists('wp_next_scheduled') && !wp_next_scheduled('storekeeper_expire_holds')) {
+            if (!function_exists('wp_next_scheduled')) {
+                return;
+            }
+
+            if (!wp_next_scheduled('storekeeper_expire_holds')) {
                 wp_schedule_event(time() + 300, 'hourly', 'storekeeper_expire_holds');
             }
+
+            if (!wp_next_scheduled('storekeeper_dispatch_messages')) {
+                wp_schedule_event(time() + 600, 'hourly', 'storekeeper_dispatch_messages');
+            }
         }, 20);
+
+        // §12.2: a checkout queues its confirmation; nothing is sent in-request.
+        add_action(Brand::hook('order/created'), static function (array $payload) use ($container): void {
+            $order = $payload['order'] ?? null;
+
+            if (!is_array($order)) {
+                return;
+            }
+
+            $address = json_decode((string) ($order['shipping_address'] ?? ''), true);
+            $buyerEmail = is_array($address) ? ($address['email'] ?? null) : null;
+
+            if ((!is_string($buyerEmail) || $buyerEmail === '') && !empty($order['customer_id'])) {
+                $customer = $container->get(CustomerRepository::class)->customer((int) $order['customer_id']);
+                $buyerEmail = $customer['email'] ?? null;
+            }
+
+            $staffEmail = (string) get_option(
+                Brand::OPTION_PREFIX . 'notification_email',
+                (string) get_option('admin_email')
+            );
+
+            $container->get(OrderNotifications::class)->orderCreated(
+                $order,
+                count($payload['items'] ?? []),
+                is_string($buyerEmail) ? $buyerEmail : null,
+                $staffEmail === '' ? null : $staffEmail,
+                [
+                    'store_name' => (string) get_bloginfo('name'),
+                    'order_url' => Storefront::orderUrl($order),
+                    'bank_details' => (string) get_option(Brand::OPTION_PREFIX . 'bank_details', ''),
+                ]
+            );
+        });
 
         // A store request always runs with exactly one blog context (§6.4).
         add_action('init', static function () use ($container): void {

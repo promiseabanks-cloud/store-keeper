@@ -50,6 +50,20 @@ the pages then show wholesale prices (₦6,200 for the gold hoops instead of ₦
 Turn the option off (`option delete storekeeper_otp_show_code`) to see the
 production behaviour, where the code reaches only the PHP error log.
 
+### Trying the notification outbox
+
+A preview host has no mail server, so the preview uses the log transport:
+
+```bash
+wp --url=https://<preview-host>/ladies-corner option update storekeeper_notification_transport log
+wp --url=https://<preview-host>/ladies-corner option update storekeeper_notification_email shop@example.test
+wp --url=https://<preview-host>/ladies-corner storekeeper messages dispatch
+```
+
+A checkout with an email address queues two rows in `storekeeper_message_log`
+(buyer confirmation and staff alert); `dispatch` sends them and the log line shows
+the rendered message. Remove the option to go back to `wp_mail`.
+
 ## Opening the back office
 
 The preview panel loads pages in an iframe, and WordPress sends

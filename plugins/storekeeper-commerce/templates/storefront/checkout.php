@@ -85,6 +85,19 @@ get_header();
                         >
                         <p class="skf-field__hint">We use this to reach you about this order.</p>
                     </div>
+
+                    <div class="skf-field">
+                        <label for="skf-email">Email (optional)</label>
+                        <input
+                            id="skf-email"
+                            type="email"
+                            name="email"
+                            autocomplete="email"
+                            placeholder="you@example.com"
+                            value="<?php echo esc_attr((string) ($_POST['email'] ?? $customer['email'] ?? '')); ?>"
+                        >
+                        <p class="skf-field__hint">Where we send your order confirmation and payment details.</p>
+                    </div>
                 </section>
 
                 <section class="skf-panel" aria-labelledby="skf-shipping-title">

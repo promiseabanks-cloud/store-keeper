@@ -141,7 +141,17 @@ if (defined('WP_CLI') && WP_CLI) {
         new \StoreKeeper\Commerce\Cli\StockCommand(Plugin::container()->get(\StoreKeeper\Commerce\Inventory\InventoryService::class))
     );
     \WP_CLI::add_command(
-        'storekeeper orders',
-        new \StoreKeeper\Commerce\Cli\OrderCommand(Plugin::container()->get(\StoreKeeper\Commerce\Orders\OrderService::class))
+        'storekeeper orders expire-holds',
+        [
+            new \StoreKeeper\Commerce\Cli\OrderCommand(Plugin::container()->get(\StoreKeeper\Commerce\Orders\OrderService::class)),
+            'expireHolds',
+        ]
+    );
+    \WP_CLI::add_command(
+        'storekeeper messages dispatch',
+        [
+            new \StoreKeeper\Commerce\Cli\MessageCommand(Plugin::container()->get(\StoreKeeper\Commerce\Notifications\MessageService::class)),
+            'dispatch',
+        ]
     );
 }

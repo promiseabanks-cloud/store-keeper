@@ -196,6 +196,32 @@ final class CheckoutTest extends TestCase
         self::assertSame((int) $customer['group_id'], (int) $result['order']['customer_group_id']);
     }
 
+    public function testTheOptionalEmailIsKeptForTheConfirmation(): void
+    {
+        $token = $this->cartWith(1);
+
+        $result = $this->store->checkout->place($this->input(['email' => 'Ada@Example.com']), $token, null);
+        $address = json_decode((string) $result['order']['shipping_address'], true);
+
+        self::assertSame('ada@example.com', $address['email']);
+    }
+
+    public function testABadEmailIsRefusedBeforeAnyOrderIsCreated(): void
+    {
+        $token = $this->cartWith(1);
+
+        try {
+            $this->store->checkout->place($this->input(['email' => 'not-an-email']), $token, null);
+            self::fail('Expected a bad email address to be refused.');
+        } catch (ValidationFailed $error) {
+            self::assertStringContainsString('email address', $error->getMessage());
+        }
+
+        self::assertSame(0, (int) $this->store->db->scalar(
+            sprintf('SELECT COUNT(*) FROM %sorders', $this->store->db->prefix())
+        ));
+    }
+
     /** @param array<string,mixed> $overrides */
     private function input(array $overrides = []): array
     {

@@ -24,6 +24,10 @@ use StoreKeeper\Commerce\Customers\OtpRepository;
 use StoreKeeper\Commerce\Customers\StorefrontAuth;
 use StoreKeeper\Commerce\Inventory\InventoryRepository;
 use StoreKeeper\Commerce\Inventory\InventoryService;
+use StoreKeeper\Commerce\Notifications\MessageLogRepository;
+use StoreKeeper\Commerce\Notifications\MessageService;
+use StoreKeeper\Commerce\Notifications\MessageTemplateRepository;
+use StoreKeeper\Commerce\Notifications\OrderNotifications;
 use StoreKeeper\Commerce\Orders\OrderRepository;
 use StoreKeeper\Commerce\Orders\OrderService;
 use StoreKeeper\Commerce\Pricing\PricingRepository;
@@ -77,6 +81,16 @@ final class TestStore
     public CartService $cart;
 
     public CheckoutService $checkout;
+
+    public MessageTemplateRepository $templateRepository;
+
+    public MessageLogRepository $messageLog;
+
+    public InMemoryChannel $channel;
+
+    public MessageService $messages;
+
+    public OrderNotifications $orderNotifications;
 
     /** Flat delivery fee used by the test checkout; shipping tests rely on it. */
     public int $flatShippingKobo = 150000;
@@ -155,6 +169,17 @@ final class TestStore
             $this->inventoryRepository,
             $this->clock
         );
+        $this->templateRepository = new MessageTemplateRepository($db);
+        $this->messageLog = new MessageLogRepository($db);
+        $this->channel = new InMemoryChannel();
+        $this->messages = new MessageService(
+            $this->templateRepository,
+            $this->messageLog,
+            ['email' => $this->channel],
+            $this->clock
+        );
+        $this->orderNotifications = new OrderNotifications($this->messages);
+
         $this->checkout = new CheckoutService(
             $this->cartRepository,
             $this->cart,

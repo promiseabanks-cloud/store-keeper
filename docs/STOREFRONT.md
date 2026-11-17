@@ -87,6 +87,11 @@ shipping fee (pickup is free; delivery appears only when
 browser cannot influence the price and two shoppers cannot oversell the last
 piece.
 
+The checkout form takes an optional email address. It is stored on the order's
+contact details and used for the confirmation message; a signed-in customer's
+stored email is used when the field is left blank. Nothing is sent during the
+checkout request — the message is queued and dispatched later (D-032).
+
 Guest checkout (D-027) does **not** attach an existing customer record: typing
 someone else's phone number cannot place an order on their account. The phone is
 kept on the order's shipping/contact JSON. Signed-in customers are attached and
