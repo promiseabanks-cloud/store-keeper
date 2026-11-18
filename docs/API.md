@@ -38,6 +38,8 @@ Error codes defined so far (mapped to HTTP status in `Rest\ErrorMapper` when con
 | `idempotency_conflict` | 409 | `Core\Idempotency\DuplicateRequest` |
 | `not_found` | 404 | `Core\Exception\NotFound` |
 | `validation_failed` | 422 | `Core\Exception\ValidationFailed` |
+| `invalid_device` | 401 | `Pos\DeviceGuard` (unknown or revoked device token) |
+| `rate_limited` | 429 | `Pos\DeviceGuard`; `data` carries `retry_after`, `limit`, `remaining` (D-041) |
 | `invalid_phone` | 422 | `Core\Phone::normalise()` |
 | `plan_limit_reached` | 402 | `Platform\PlanGate` (Phase 6) |
 
@@ -200,6 +202,11 @@ Merchants register the webhook URL shown in **Payment gateways**:
 Device-token routes take `Device: <token>` (the `skd_…` value returned once at
 registration) instead of a WordPress cookie. Staff routes use the normal cookie
 and capability.
+
+Every device-token route (POS and sync) is rate limited (D-041): a device may
+make 120 requests per minute, and a client IP may fail 20 device tokens per
+minute. Over either limit the answer is `429 rate_limited` with `retry_after`
+(seconds), `limit` and `remaining: 0` in `data`.
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|

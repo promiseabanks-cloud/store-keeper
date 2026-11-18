@@ -84,19 +84,38 @@ step if a store outgrows it.
 - The result lists `applied` / `duplicate` / `rejected` per `client_uuid`, plus
   fresh stock levels for the affected variants.
 
+## Safety rails
+
+**Device rate limits** (D-041). Every device-token route — the counter endpoints,
+`/pos/staff` and both sync routes — passes through `Pos\DeviceGuard`:
+
+- A registered device may make **120 requests per minute** across all of them.
+  Past that the response is `429 rate_limited` with `retry_after` (seconds),
+  `limit` and `remaining: 0` in the error data.
+- **20 failed token attempts per minute per client IP** are tolerated; the next
+  one is `429` even before the token is checked. Successful requests do not
+  count against this bucket, so several tablets behind one shop connection are
+  unaffected.
+- The fixed window lives in `pos_rate_limits` (one row per bucket), so it is
+  shared by every PHP worker. The hourly `storekeeper_check_devices` tick prunes
+  expired buckets.
+
+**Storefront safety buffer** (§15.2, D-041). `offline_buffer_units` (default 0)
+and `device_stale_minutes` (default 10) are settings sent to the device. While a
+sellable location has an active device whose `last_sync_at` is missing or older
+than the stale window, the storefront (product pages, search, cart) shows that
+location's `available − buffer`, never below zero. Locations without a stale
+device, and locations whose device was revoked, keep their full level. The
+buffer only protects display and cart quantities; the ledger itself is not
+adjusted, and an offline sale still lands when the device reconnects (an
+oversell raises an alert).
+
 ## What is not built
 
-- **Storefront safety buffer.** `offline_buffer_units` and
-  `device_stale_minutes` are settings and are sent to the device, and stale
-  devices raise `device_stale` alerts hourly, but the storefront does not yet
-  subtract a buffer from `available`.
 - **Thermal printer integration.** Receipts print with the browser's print
   dialog; there is no Bluetooth/USB driver and no WhatsApp image share.
 - **Barcode hardware.** Search accepts a typed/scanned SKU as keyboard input; no
   camera scanner.
-- **Rate limiting** on the device endpoints. The device token is the only gate,
-  so a leaked token can push sales until it is revoked. Rate limiting is the next
-  security increment.
 - **Customer credit limits** (`credit_limit_kobo`) are not enforced on credit
   sales.
 - The app has **not been exercised in a real browser or on a phone** in this
@@ -107,3 +126,6 @@ step if a store outgrows it.
 `tests/Integration/PosTest.php` (9) and `tests/Integration/SyncTest.php` (7)
 cover registration/revoke, PIN lockout, counter sales, split payments, oversell,
 idempotency, parked sales, cash-up, returns and the pull/push protocol.
+`tests/Integration/PosSafetyTest.php` (5) covers the device and failed-token
+limits, window recovery, rate-limit pruning, and the storefront buffer while a
+device is fresh, stale, or revoked (including the zero floor).

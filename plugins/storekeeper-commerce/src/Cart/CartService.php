@@ -10,7 +10,7 @@ use StoreKeeper\Commerce\Core\Clock;
 use StoreKeeper\Commerce\Core\Dates;
 use StoreKeeper\Commerce\Core\Exception\ValidationFailed;
 use StoreKeeper\Commerce\Core\Uuid;
-use StoreKeeper\Commerce\Inventory\InventoryRepository;
+use StoreKeeper\Commerce\Inventory\InventoryService;
 use StoreKeeper\Commerce\Pricing\Exception\PriceNotFound;
 use StoreKeeper\Commerce\Pricing\PricingService;
 
@@ -30,7 +30,7 @@ final class CartService
         private readonly CartRepository $carts,
         private readonly CatalogRepository $catalog,
         private readonly PricingService $pricing,
-        private readonly InventoryRepository $inventory,
+        private readonly InventoryService $inventory,
         private readonly Clock $clock,
     ) {
     }

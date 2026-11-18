@@ -36,8 +36,10 @@ use StoreKeeper\Commerce\Orders\ShipmentRepository;
 use StoreKeeper\Commerce\Orders\ShipmentService;
 use StoreKeeper\Commerce\Pos\ChangeLog;
 use StoreKeeper\Commerce\Pos\CounterService;
+use StoreKeeper\Commerce\Pos\DeviceGuard;
 use StoreKeeper\Commerce\Pos\DeviceRepository;
 use StoreKeeper\Commerce\Pos\DeviceService;
+use StoreKeeper\Commerce\Pos\RateLimiter;
 use StoreKeeper\Commerce\Pos\SyncRepository;
 use StoreKeeper\Commerce\Pos\SyncService;
 use StoreKeeper\Commerce\Pricing\PricingRepository;
@@ -96,6 +98,10 @@ final class TestStore
 
     public DeviceService $deviceService;
 
+    public RateLimiter $rateLimiter;
+
+    public DeviceGuard $deviceGuard;
+
     public ChangeLog $changeLog;
 
     public SyncRepository $syncRepository;
@@ -131,8 +137,11 @@ final class TestStore
     /** Flat delivery fee used by the test checkout; shipping tests rely on it. */
     public int $flatShippingKobo = 150000;
 
-    private function __construct(PdoConnection $db)
-    {
+    private function __construct(
+        PdoConnection $db,
+        private readonly int $offlineBufferUnits = 0,
+        private readonly int $deviceStaleMinutes = 10,
+    ) {
         $this->db = $db;
         $this->clock = new FrozenClock();
         $this->hooks = new InMemoryHooks();
@@ -148,7 +157,10 @@ final class TestStore
             $this->inventoryRepository,
             $this->hooks,
             $this->clock,
-            $this->alerts
+            $this->alerts,
+            5,
+            $offlineBufferUnits,
+            $deviceStaleMinutes
         );
 
         $this->catalogRepository = new CatalogRepository($db, $this->clock);
@@ -217,7 +229,7 @@ final class TestStore
             $this->cartRepository,
             $this->catalogRepository,
             $this->pricing,
-            $this->inventoryRepository,
+            $this->inventory,
             $this->clock
         );
         $this->registration = new StorefrontRegistration($this->customerRepository, $this->customers);
@@ -238,6 +250,8 @@ final class TestStore
         $this->changeLog = new ChangeLog($db, $this->clock);
         $this->syncRepository = new SyncRepository($db);
         $this->deviceRepository = new DeviceRepository($db, $this->clock);
+        $this->rateLimiter = new RateLimiter($db, $this->clock);
+        $this->deviceGuard = new DeviceGuard($this->deviceRepository, $this->rateLimiter);
         $this->deviceService = new DeviceService(
             $db,
             $this->deviceRepository,
@@ -282,14 +296,14 @@ final class TestStore
         );
     }
 
-    public static function create(): self
+    public static function create(int $offlineBufferUnits = 0, int $deviceStaleMinutes = 10): self
     {
-        return new self(TestDatabase::fresh());
+        return new self(TestDatabase::fresh(), $offlineBufferUnits, $deviceStaleMinutes);
     }
 
-    public static function connect(): self
+    public static function connect(int $offlineBufferUnits = 0, int $deviceStaleMinutes = 10): self
     {
-        return new self(TestDatabase::connection());
+        return new self(TestDatabase::connection(), $offlineBufferUnits, $deviceStaleMinutes);
     }
 
     public function actor(): Actor

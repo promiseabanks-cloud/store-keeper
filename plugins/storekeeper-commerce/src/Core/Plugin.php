@@ -29,8 +29,10 @@ use StoreKeeper\Commerce\Orders\ShipmentService;
 use StoreKeeper\Commerce\Payments\Gateway\GatewayRegistry;
 use StoreKeeper\Commerce\Pos\ChangeLog;
 use StoreKeeper\Commerce\Pos\CounterService;
+use StoreKeeper\Commerce\Pos\DeviceGuard;
 use StoreKeeper\Commerce\Pos\DeviceRepository;
 use StoreKeeper\Commerce\Pos\DeviceService;
+use StoreKeeper\Commerce\Pos\RateLimiter;
 use StoreKeeper\Commerce\Pos\SyncRepository;
 use StoreKeeper\Commerce\Pos\SyncService;
 use StoreKeeper\Commerce\Payments\Gateway\WordPressHttpClient;
@@ -121,7 +123,9 @@ final class Plugin
             $c->get(Hooks\Hooks::class),
             $c->get(Clock::class),
             $c->get(AlertService::class),
-            (int) get_option(Brand::OPTION_PREFIX . 'low_stock_default', 5)
+            (int) get_option(Brand::OPTION_PREFIX . 'low_stock_default', 5),
+            (int) get_option(Brand::OPTION_PREFIX . 'offline_buffer_units', 0),
+            (int) get_option(Brand::OPTION_PREFIX . 'device_stale_minutes', 10)
         ));
 
         $container->singleton(CatalogRepository::class, static fn (Container $c): CatalogRepository => new CatalogRepository(
@@ -268,7 +272,7 @@ final class Plugin
             $c->get(CatalogRepository::class),
             $c->get(PricingService::class),
             $c->get(PricingRepository::class),
-            $c->get(InventoryRepository::class),
+            $c->get(InventoryService::class),
             $c->get(Connection::class),
             $c->get(CustomerContext::class)
         ));
@@ -305,7 +309,7 @@ final class Plugin
             $c->get(CartRepository::class),
             $c->get(CatalogRepository::class),
             $c->get(PricingService::class),
-            $c->get(InventoryRepository::class),
+            $c->get(InventoryService::class),
             $c->get(Clock::class)
         ));
         $container->singleton(CheckoutService::class, static fn (Container $c): CheckoutService => new CheckoutService(
@@ -331,6 +335,14 @@ final class Plugin
         $container->singleton(DeviceRepository::class, static fn (Container $c): DeviceRepository => new DeviceRepository(
             $c->get(Connection::class),
             $c->get(Clock::class)
+        ));
+        $container->singleton(RateLimiter::class, static fn (Container $c): RateLimiter => new RateLimiter(
+            $c->get(Connection::class),
+            $c->get(Clock::class)
+        ));
+        $container->singleton(DeviceGuard::class, static fn (Container $c): DeviceGuard => new DeviceGuard(
+            $c->get(DeviceRepository::class),
+            $c->get(RateLimiter::class)
         ));
         $container->singleton(DeviceService::class, static fn (Container $c): DeviceService => new DeviceService(
             $c->get(Connection::class),
@@ -534,6 +546,10 @@ final class Plugin
         // §15.4: a device that stops syncing raises one alert per device.
         add_action('storekeeper_check_devices', static function () use ($container): void {
             $minutes = (int) get_option(Brand::OPTION_PREFIX . 'device_stale_minutes', 10);
+
+            // D-041: expired throttle buckets are disposable; the hourly tick
+            // keeps the limiter table small without a background job of its own.
+            $container->get(RateLimiter::class)->prune();
 
             foreach ($container->get(DeviceService::class)->stale($minutes) as $device) {
                 $container->get(AlertService::class)->raise(

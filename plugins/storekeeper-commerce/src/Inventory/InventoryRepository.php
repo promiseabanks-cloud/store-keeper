@@ -150,21 +150,31 @@ final class InventoryRepository
         );
     }
 
-    /** Sum of available across locations the storefront sells from (§9.1). */
-    public function availableOnline(int $variantId): int
+    /**
+     * Sum of available across locations the storefront sells from (§9.1).
+     *
+     * When a buffer and cutoff are given, a location whose active device has not
+     * synced since the cutoff contributes `available − buffer` (never below zero)
+     * instead of its full level (§15.2, D-041).
+     */
+    public function availableOnline(int $variantId, int $bufferUnits = 0, ?string $staleCutoff = null): int
     {
         $prefix = $this->db->prefix();
+        $params = [];
+        $available = $this->availabilityExpression($bufferUnits, $staleCutoff, $params);
+        $params[] = $variantId;
 
         return (int) $this->db->scalar(
             sprintf(
-                'SELECT COALESCE(SUM(l.on_hand - l.reserved), 0)
+                'SELECT COALESCE(SUM(%s), 0)
                    FROM %sstock_levels l
                    JOIN %slocations loc ON loc.id = l.location_id
                   WHERE l.variant_id = ? AND loc.sellable_online = 1 AND loc.is_active = 1',
+                $available,
                 $prefix,
                 $prefix
             ),
-            [$variantId]
+            $params
         );
     }
 
@@ -175,7 +185,7 @@ final class InventoryRepository
      * @param list<int> $variantIds
      * @return array<int,int> variant id => available pieces
      */
-    public function availableOnlineMany(array $variantIds): array
+    public function availableOnlineMany(array $variantIds, int $bufferUnits = 0, ?string $staleCutoff = null): array
     {
         $variantIds = array_values(array_unique(array_map('intval', $variantIds)));
         if ($variantIds === []) {
@@ -183,19 +193,22 @@ final class InventoryRepository
         }
 
         $prefix = $this->db->prefix();
+        $params = [];
+        $available = $this->availabilityExpression($bufferUnits, $staleCutoff, $params);
         $placeholders = implode(',', array_fill(0, count($variantIds), '?'));
         $rows = $this->db->select(
             sprintf(
-                'SELECT l.variant_id, COALESCE(SUM(l.on_hand - l.reserved), 0) AS available
+                'SELECT l.variant_id, COALESCE(SUM(%s), 0) AS available
                    FROM %sstock_levels l
                    JOIN %slocations loc ON loc.id = l.location_id
                   WHERE l.variant_id IN (' . $placeholders . ')
                     AND loc.sellable_online = 1 AND loc.is_active = 1
                   GROUP BY l.variant_id',
+                $available,
                 $prefix,
                 $prefix
             ),
-            $variantIds
+            [...$params, ...$variantIds]
         );
 
         $available = array_fill_keys($variantIds, 0);
@@ -204,6 +217,36 @@ final class InventoryRepository
         }
 
         return $available;
+    }
+
+    /**
+     * Per-location availability, with the offline safety buffer applied only to
+     * locations whose active device is stale (§15.2, D-041).
+     *
+     * @param list<int|string|null> $params receives the cutoff value, so it must
+     *        be read before any other placeholder is appended
+     */
+    private function availabilityExpression(int $bufferUnits, ?string $staleCutoff, array &$params): string
+    {
+        if ($bufferUnits <= 0 || $staleCutoff === null) {
+            return 'l.on_hand - l.reserved';
+        }
+
+        $params[] = $staleCutoff;
+
+        return sprintf(
+            "CASE WHEN EXISTS (
+                        SELECT 1 FROM %sdevices d
+                         WHERE d.location_id = loc.id
+                           AND d.status = 'active'
+                           AND (d.last_sync_at IS NULL OR d.last_sync_at < ?)
+                    )
+                    THEN GREATEST(l.on_hand - l.reserved - %d, 0)
+                    ELSE l.on_hand - l.reserved
+              END",
+            $this->db->prefix(),
+            $bufferUnits
+        );
     }
 
     public function onHandAt(int $variantId, int $locationId): int

@@ -6,20 +6,21 @@ namespace StoreKeeper\Commerce\Rest;
 
 use StoreKeeper\Commerce\Core\Brand;
 use StoreKeeper\Commerce\Core\Exception\StoreKeeperException;
-use StoreKeeper\Commerce\Pos\DeviceService;
+use StoreKeeper\Commerce\Pos\DeviceGuard;
 use StoreKeeper\Commerce\Pos\SyncService;
 
 /**
  * `GET /sync/pull` and `POST /sync/push` (§15.3, §18).
  *
  * Both require the device token; a cashier's PIN is checked at sign-in and each
- * sale carries the cashier's user id.
+ * sale carries the cashier's user id. The shared guard applies the device's
+ * per-minute request budget (D-041).
  */
 final class SyncController
 {
     public function __construct(
         private readonly SyncService $sync,
-        private readonly DeviceService $devices,
+        private readonly DeviceGuard $guard,
     ) {
     }
 
@@ -42,15 +43,7 @@ final class SyncController
 
     public function devicePermission(\WP_REST_Request $request): bool|\WP_Error
     {
-        $device = $this->devices->authenticate((string) $request->get_header('device'));
-
-        if ($device === null) {
-            return new \WP_Error('invalid_device', 'This device is not registered or was revoked.', ['status' => 401]);
-        }
-
-        $request->set_param('_device', $device);
-
-        return true;
+        return $this->guard->permission($request);
     }
 
     public function pull(\WP_REST_Request $request): \WP_REST_Response|\WP_Error

@@ -7,7 +7,7 @@ namespace StoreKeeper\Commerce\Storefront;
 use StoreKeeper\Commerce\Catalog\CatalogRepository;
 use StoreKeeper\Commerce\Core\Brand;
 use StoreKeeper\Commerce\Core\Database\Connection;
-use StoreKeeper\Commerce\Inventory\InventoryRepository;
+use StoreKeeper\Commerce\Inventory\InventoryService;
 use StoreKeeper\Commerce\Pricing\Exception\PriceNotFound;
 use StoreKeeper\Commerce\Pricing\PricingRepository;
 use StoreKeeper\Commerce\Pricing\PricingService;
@@ -27,7 +27,7 @@ final class CatalogView
         private readonly CatalogRepository $catalog,
         private readonly PricingService $pricing,
         private readonly PricingRepository $prices,
-        private readonly InventoryRepository $inventory,
+        private readonly InventoryService $inventory,
         private readonly Connection $db,
         private readonly CustomerContext $customers,
     ) {

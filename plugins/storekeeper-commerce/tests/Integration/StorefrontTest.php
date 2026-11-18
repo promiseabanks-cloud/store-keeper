@@ -181,7 +181,7 @@ final class StorefrontTest extends TestCase
             $this->store->catalogRepository,
             $this->store->pricing,
             $this->store->pricingRepository,
-            $this->store->inventoryRepository,
+            $this->store->inventory,
             $this->store->db,
             new CustomerContext($customer === null ? null : static fn (): array => $customer),
         );

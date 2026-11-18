@@ -35,6 +35,8 @@ final class InventoryService
         private readonly Clock $clock,
         private readonly AlertService $alerts,
         private readonly int $defaultLowStockThreshold = 5,
+        private readonly int $offlineBufferUnits = 0,
+        private readonly int $deviceStaleMinutes = 10,
     ) {
     }
 
@@ -763,10 +765,26 @@ final class InventoryService
         return $this->repo->availableAt($variantId, $locationId);
     }
 
-    /** Storefront availability: sum across sellable locations (§9.1). */
+    /** Storefront availability: sum across sellable locations (§9.1, §15.2). */
     public function availableOnline(int $variantId): int
     {
-        return $this->repo->availableOnline($variantId);
+        [$buffer, $cutoff] = $this->availabilityPolicy();
+
+        return $this->repo->availableOnline($variantId, $buffer, $cutoff);
+    }
+
+    /**
+     * Storefront availability for many variants in one query, with the same
+     * offline safety buffer as `availableOnline` (§15.2, D-041).
+     *
+     * @param list<int> $variantIds
+     * @return array<int,int>
+     */
+    public function availableOnlineMany(array $variantIds): array
+    {
+        [$buffer, $cutoff] = $this->availabilityPolicy();
+
+        return $this->repo->availableOnlineMany($variantIds, $buffer, $cutoff);
     }
 
     /**
@@ -858,7 +876,8 @@ final class InventoryService
         $threshold = $variant['low_stock_threshold'] === null
             ? $this->defaultLowStockThreshold
             : (int) $variant['low_stock_threshold'];
-        $available = $this->repo->availableOnline($variantId);
+        [$buffer, $cutoff] = $this->availabilityPolicy();
+        $available = $this->repo->availableOnline($variantId, $buffer, $cutoff);
 
         if ($available <= $threshold) {
             $this->alerts->raise(AlertService::LOW_STOCK, AlertService::WARNING, 'variant', $variantId, [
@@ -873,6 +892,24 @@ final class InventoryService
                 'threshold' => $threshold,
             ]);
         }
+    }
+
+    /**
+     * The storefront buffer and the cutoff that makes a device stale.
+     *
+     * @return array{0:int,1:?string} buffer units, cutoff (null when buffering is off)
+     */
+    private function availabilityPolicy(): array
+    {
+        if ($this->offlineBufferUnits <= 0) {
+            return [0, null];
+        }
+
+        $cutoff = $this->clock->now()
+            ->modify(sprintf('-%d minutes', max(1, $this->deviceStaleMinutes)))
+            ->format('Y-m-d H:i:s.v');
+
+        return [$this->offlineBufferUnits, $cutoff];
     }
 
     /** @param array<string,mixed> $level */

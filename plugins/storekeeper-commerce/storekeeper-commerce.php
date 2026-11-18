@@ -118,12 +118,13 @@ add_action('plugins_loaded', static function (): void {
         (new \StoreKeeper\Commerce\Rest\PosController(
             $container->get(\StoreKeeper\Commerce\Pos\DeviceService::class),
             $container->get(\StoreKeeper\Commerce\Pos\CounterService::class),
-            $api
+            $api,
+            $container->get(\StoreKeeper\Commerce\Pos\DeviceGuard::class)
         ))->register();
 
         (new \StoreKeeper\Commerce\Rest\SyncController(
             $container->get(\StoreKeeper\Commerce\Pos\SyncService::class),
-            $container->get(\StoreKeeper\Commerce\Pos\DeviceService::class)
+            $container->get(\StoreKeeper\Commerce\Pos\DeviceGuard::class)
         ))->register();
 
         (new \StoreKeeper\Commerce\Rest\WebhookController(

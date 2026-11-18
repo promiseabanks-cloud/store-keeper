@@ -10,6 +10,7 @@ use StoreKeeper\Commerce\Core\Capabilities;
 use StoreKeeper\Commerce\Core\Exception\NotFound;
 use StoreKeeper\Commerce\Core\Exception\StoreKeeperException;
 use StoreKeeper\Commerce\Pos\CounterService;
+use StoreKeeper\Commerce\Pos\DeviceGuard;
 use StoreKeeper\Commerce\Pos\DeviceService;
 
 /**
@@ -25,6 +26,7 @@ final class PosController
         private readonly DeviceService $devices,
         private readonly CounterService $counter,
         private readonly Api $api,
+        private readonly DeviceGuard $guard,
     ) {
     }
 
@@ -112,15 +114,7 @@ final class PosController
     /** Permission callback for every device-token route. */
     public function devicePermission(\WP_REST_Request $request): bool|\WP_Error
     {
-        $device = $this->devices->authenticate((string) $request->get_header('device'));
-
-        if ($device === null) {
-            return new \WP_Error('invalid_device', 'This device is not registered or was revoked.', ['status' => 401]);
-        }
-
-        $request->set_param('_device', $device);
-
-        return true;
+        return $this->guard->permission($request);
     }
 
     public function devices(): \WP_REST_Response
