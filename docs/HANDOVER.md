@@ -130,6 +130,8 @@ service.
    stock, D-005). `on_hand - reserved` is availability; storefront availability
    only sums locations with `sellable_online = 1 AND is_active = 1`, and subtracts
    `offline_buffer_units` at a location whose active POS device is stale (D-041).
+   A successful pull or push counts as a sync, so a read-only tablet is not stale
+   (D-042); the check is indexed by `devices(location_id, status)`.
 7. **Hooks** are `storekeeper/{name}` (`Brand::hook()`), dispatched through
    `Core\Hooks\Hooks` (`WpHooks` in production, `InMemoryHooks` in tests).
 8. **Storefront caching:** guest grids only, transient keyed by blog + price list
@@ -183,7 +185,7 @@ php vendor/bin/phpunit --filter StorefrontTest
 composer lint                                # php -l over every plugin file
 ```
 
-Last green run: **231 tests, 1,909 assertions** (POS, sync, POS safety and platform included).
+Last green run: **232 tests, 1,914 assertions** (POS, sync, POS safety and platform included).
 
 ### Preview site
 

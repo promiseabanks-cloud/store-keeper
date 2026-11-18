@@ -105,7 +105,13 @@ and `device_stale_minutes` (default 10) are settings sent to the device. While a
 sellable location has an active device whose `last_sync_at` is missing or older
 than the stale window, the storefront (product pages, search, cart) shows that
 location's `available − buffer`, never below zero. Locations without a stale
-device, and locations whose device was revoked, keep their full level. The
+device, and locations whose device was revoked, keep their full level.
+
+**A pull counts as a sync** (D-042). Both `/sync/pull` and `/sync/push` refresh
+`last_sync_at`, so a tablet that only reads stock — nothing to push yet — is not
+stale and keeps its location fully sellable. The stale lookup filters `devices`
+by `location_id` and `status`, which migration `0013_device_location_index`
+indexes. The
 buffer only protects display and cart quantities; the ledger itself is not
 adjusted, and an offline sale still lands when the device reconnects (an
 oversell raises an alert).
@@ -126,6 +132,6 @@ oversell raises an alert).
 `tests/Integration/PosTest.php` (9) and `tests/Integration/SyncTest.php` (7)
 cover registration/revoke, PIN lockout, counter sales, split payments, oversell,
 idempotency, parked sales, cash-up, returns and the pull/push protocol.
-`tests/Integration/PosSafetyTest.php` (5) covers the device and failed-token
+`tests/Integration/PosSafetyTest.php` (6) covers the device and failed-token
 limits, window recovery, rate-limit pruning, and the storefront buffer while a
-device is fresh, stale, or revoked (including the zero floor).
+device is fresh, stale, revoked or pull-only (including the zero floor).

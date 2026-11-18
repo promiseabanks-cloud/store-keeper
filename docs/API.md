@@ -227,7 +227,7 @@ minute. Over either limit the answer is `429 rate_limited` with `retry_after`
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/sync/pull` | device token | `?cursor=`; returns `cursor`, `full_resync_required`, `catalog`, `pack_units`, `prices`, `groups`, `customer_prices`, `stock_levels`, `customer_changes`, `order_changes`, `settings`, `server_time`. |
+| GET | `/sync/pull` | device token | `?cursor=`; returns `cursor`, `full_resync_required`, `catalog`, `pack_units`, `prices`, `groups`, `customer_prices`, `stock_levels`, `customer_changes`, `order_changes`, `settings`, `server_time`. A successful pull also refreshes the device's `last_sync_at`, so a read-only device is not "stale" (D-042). |
 | POST | `/sync/push` | device token | Body: `{batch_uuid, operations:[…]}` with operations `counter_sale`, `counter_return`, `cash_up`, `customer_create`. Returns `results` (`applied`/`duplicate`/`rejected`), `replayed`, `stock_levels`. A resent `batch_uuid` returns the stored result. |
 
 ## Platform (§17)

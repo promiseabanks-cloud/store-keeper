@@ -116,6 +116,12 @@ final class SyncService
             }
         }
 
+        // A pull means the device is reachable and now holds current stock, so
+        // it counts as a sync even when it has not pushed anything yet. Without
+        // this a tablet that only reads would stay "stale" forever and the
+        // storefront would keep reserving a buffer it no longer needs.
+        $this->devices->touchSynced((int) $device['id']);
+
         return [
             'cursor' => (string) $latest,
             'full_resync_required' => $fullResync,

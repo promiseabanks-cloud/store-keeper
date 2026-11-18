@@ -106,6 +106,37 @@ final class PosSafetyTest extends TestCase
         self::assertSame(15, $store->inventory->availableOnline($variantId), 'A revoked device no longer hedges');
     }
 
+    public function testAPullOnlyDeviceIsNotTreatedAsStale(): void
+    {
+        $store = TestStore::create(offlineBufferUnits: 2, deviceStaleMinutes: 10);
+        $store->seedGroups();
+        $locationId = (int) $store->seedLocation()['id'];
+        $variantId = (int) $store->seedProduct($locationId, 500000, 10)['variant']['id'];
+
+        $registered = $store->deviceService->register(
+            ['name' => 'Shelf tablet', 'location_id' => $locationId],
+            Actor::staff(1)
+        );
+        $deviceId = (int) $registered['device']['id'];
+
+        self::assertSame(8, $store->inventory->availableOnline($variantId), 'A device that never synced is stale');
+
+        // The tablet only reads: it pulls stock but never pushes a batch.
+        $store->sync->pull($registered['device'], null);
+
+        self::assertNotNull(
+            $store->deviceRepository->find($deviceId)['last_sync_at'],
+            'A successful pull refreshes the device sync time'
+        );
+        self::assertSame(10, $store->inventory->availableOnline($variantId), 'A pull lifts the buffer');
+
+        $store->clock->advance('11 minutes');
+        self::assertSame(8, $store->inventory->availableOnline($variantId), 'The buffer returns once the pull is old');
+
+        $store->sync->pull($registered['device'], '0');
+        self::assertSame(10, $store->inventory->availableOnline($variantId), 'The next pull lifts it again');
+    }
+
     public function testStorefrontAvailabilityNeverGoesBelowZero(): void
     {
         $store = TestStore::create(offlineBufferUnits: 5);
