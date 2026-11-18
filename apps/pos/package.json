@@ -2,9 +2,9 @@
     "name": "@storekeeper/pos",
     "version": "0.1.0",
     "private": true,
-    "description": "Store Keeper offline-capable point of sale PWA (Phase 5).",
+    "description": "Store Keeper POS PWA. The app ships as plain HTML/CSS/JS in plugins/storekeeper-commerce/templates/pos and assets/pos, so there is no build step.",
     "scripts": {
-        "build": "echo 'POS PWA build lands in Phase 5 (§22.6)'",
-        "lint": "echo 'Lint configuration lands with the POS in Phase 5'"
+        "build": "echo 'POS assets are plain JS in plugins/storekeeper-commerce/assets/pos (no build step)'",
+        "lint": "node --check ../plugins/storekeeper-commerce/assets/pos/pos.js"
     }
 }

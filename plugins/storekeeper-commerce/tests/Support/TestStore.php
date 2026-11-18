@@ -34,6 +34,12 @@ use StoreKeeper\Commerce\Orders\OrderRepository;
 use StoreKeeper\Commerce\Orders\OrderService;
 use StoreKeeper\Commerce\Orders\ShipmentRepository;
 use StoreKeeper\Commerce\Orders\ShipmentService;
+use StoreKeeper\Commerce\Pos\ChangeLog;
+use StoreKeeper\Commerce\Pos\CounterService;
+use StoreKeeper\Commerce\Pos\DeviceRepository;
+use StoreKeeper\Commerce\Pos\DeviceService;
+use StoreKeeper\Commerce\Pos\SyncRepository;
+use StoreKeeper\Commerce\Pos\SyncService;
 use StoreKeeper\Commerce\Pricing\PricingRepository;
 use StoreKeeper\Commerce\Pricing\PricingService;
 use StoreKeeper\Commerce\Shipping\ShippingRepository;
@@ -85,6 +91,18 @@ final class TestStore
     public ShipmentRepository $shipmentRepository;
 
     public ShipmentService $shipments;
+
+    public DeviceRepository $deviceRepository;
+
+    public DeviceService $deviceService;
+
+    public ChangeLog $changeLog;
+
+    public SyncRepository $syncRepository;
+
+    public CounterService $counter;
+
+    public SyncService $sync;
 
     public ShippingRepository $shippingRepository;
 
@@ -215,6 +233,42 @@ final class TestStore
             $this->clock
         );
         $this->orderNotifications = new OrderNotifications($this->messages);
+
+        // POS (§15): one device at the shop, selling through the same engine.
+        $this->changeLog = new ChangeLog($db, $this->clock);
+        $this->syncRepository = new SyncRepository($db);
+        $this->deviceRepository = new DeviceRepository($db, $this->clock);
+        $this->deviceService = new DeviceService(
+            $db,
+            $this->deviceRepository,
+            $this->inventoryRepository,
+            $this->audit,
+            $this->clock
+        );
+        $this->counter = new CounterService(
+            $db,
+            $this->orders,
+            $this->orderRepository,
+            $this->syncRepository,
+            $this->catalogRepository,
+            $this->pricing,
+            $this->inventory,
+            $this->changeLog,
+            $this->audit,
+            $this->clock
+        );
+        $this->sync = new SyncService(
+            $db,
+            $this->syncRepository,
+            $this->changeLog,
+            $this->counter,
+            $this->customers,
+            $this->customerRepository,
+            $this->orderRepository,
+            $this->deviceService,
+            $this->audit,
+            $this->clock
+        );
 
         $this->checkout = new CheckoutService(
             $this->cartRepository,

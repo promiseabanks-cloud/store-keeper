@@ -27,6 +27,12 @@ use StoreKeeper\Commerce\Orders\OrderService;
 use StoreKeeper\Commerce\Orders\ShipmentRepository;
 use StoreKeeper\Commerce\Orders\ShipmentService;
 use StoreKeeper\Commerce\Payments\Gateway\GatewayRegistry;
+use StoreKeeper\Commerce\Pos\ChangeLog;
+use StoreKeeper\Commerce\Pos\CounterService;
+use StoreKeeper\Commerce\Pos\DeviceRepository;
+use StoreKeeper\Commerce\Pos\DeviceService;
+use StoreKeeper\Commerce\Pos\SyncRepository;
+use StoreKeeper\Commerce\Pos\SyncService;
 use StoreKeeper\Commerce\Payments\Gateway\WordPressHttpClient;
 use StoreKeeper\Commerce\Payments\GatewaySettings;
 use StoreKeeper\Commerce\Payments\PaymentRepository;
@@ -313,6 +319,52 @@ final class Plugin
             $c->get(ShippingService::class)
         ));
 
+        // POS (§15.1): a registered device sells at its own location, and every
+        // sale leaves a change the other devices can pull.
+        $container->singleton(ChangeLog::class, static fn (Container $c): ChangeLog => new ChangeLog(
+            $c->get(Connection::class),
+            $c->get(Clock::class)
+        ));
+        $container->singleton(SyncRepository::class, static fn (Container $c): SyncRepository => new SyncRepository(
+            $c->get(Connection::class)
+        ));
+        $container->singleton(DeviceRepository::class, static fn (Container $c): DeviceRepository => new DeviceRepository(
+            $c->get(Connection::class),
+            $c->get(Clock::class)
+        ));
+        $container->singleton(DeviceService::class, static fn (Container $c): DeviceService => new DeviceService(
+            $c->get(Connection::class),
+            $c->get(DeviceRepository::class),
+            $c->get(InventoryRepository::class),
+            $c->get(Audit\AuditLogger::class),
+            $c->get(Clock::class)
+        ));
+        $container->singleton(CounterService::class, static fn (Container $c): CounterService => new CounterService(
+            $c->get(Connection::class),
+            $c->get(OrderService::class),
+            $c->get(OrderRepository::class),
+            $c->get(SyncRepository::class),
+            $c->get(CatalogRepository::class),
+            $c->get(PricingService::class),
+            $c->get(InventoryService::class),
+            $c->get(ChangeLog::class),
+            $c->get(Audit\AuditLogger::class),
+            $c->get(Clock::class),
+            (int) get_option(Brand::OPTION_PREFIX . 'pos_price_change_threshold_bps', 500)
+        ));
+        $container->singleton(SyncService::class, static fn (Container $c): SyncService => new SyncService(
+            $c->get(Connection::class),
+            $c->get(SyncRepository::class),
+            $c->get(ChangeLog::class),
+            $c->get(CounterService::class),
+            $c->get(CustomerService::class),
+            $c->get(CustomerRepository::class),
+            $c->get(OrderRepository::class),
+            $c->get(DeviceService::class),
+            $c->get(Audit\AuditLogger::class),
+            $c->get(Clock::class)
+        ));
+
         // The engine's shared dependencies are looked up by interface.
         $container->instance(Connection::class, $container->get('db'));
         $container->instance(Audit\AuditLogger::class, $container->get(DatabaseAuditLogger::class));
@@ -345,6 +397,10 @@ final class Plugin
 
             if (!wp_next_scheduled('storekeeper_dispatch_messages')) {
                 wp_schedule_event(time() + 600, 'hourly', 'storekeeper_dispatch_messages');
+            }
+
+            if (!wp_next_scheduled('storekeeper_check_devices')) {
+                wp_schedule_event(time() + 900, 'hourly', 'storekeeper_check_devices');
             }
         }, 20);
 
@@ -412,6 +468,86 @@ final class Plugin
                     'tracking_url' => Storefront::trackUrl($order),
                 ]
             );
+        });
+
+        // §15.3: every state change a device cares about is appended to the
+        // change feed. Devices pull stock, order and customer deltas; the
+        // catalog itself is sent in full on each pull.
+        $changeLog = $container->get(ChangeLog::class);
+
+        add_action(Brand::hook('stock/moved'), static function (array $movement) use ($changeLog): void {
+            $changeLog->record('stock', isset($movement['variant_id']) ? (int) $movement['variant_id'] : null, (string) ($movement['type'] ?? 'moved'), [
+                'variant_id' => isset($movement['variant_id']) ? (int) $movement['variant_id'] : null,
+                'location_id' => isset($movement['location_id']) ? (int) $movement['location_id'] : null,
+                'on_hand_delta' => (int) ($movement['on_hand_delta'] ?? 0),
+                'reserved_delta' => (int) ($movement['reserved_delta'] ?? 0),
+            ]);
+        });
+
+        foreach ([
+            'order/created' => 'created',
+            'order/payment_recorded' => 'payment',
+            'order/completed' => 'completed',
+            'order/cancelled' => 'cancelled',
+        ] as $hook => $action) {
+            add_action(Brand::hook($hook), static function (array $payload) use ($changeLog, $action): void {
+                $order = $payload['order'] ?? null;
+
+                if (is_array($order) && isset($order['id'])) {
+                    $changeLog->record('order', (int) $order['id'], $action, [
+                        'number' => $order['number'] ?? null,
+                        'status' => $order['status'] ?? null,
+                        'payment_status' => $order['payment_status'] ?? null,
+                    ]);
+                }
+            });
+        }
+
+        add_action(Brand::hook('customer/registered'), static function (array $payload) use ($changeLog): void {
+            $customer = $payload['customer'] ?? null;
+
+            if (is_array($customer) && isset($customer['id'])) {
+                $changeLog->record('customer', (int) $customer['id'], 'registered', [
+                    'name' => $customer['name'] ?? null,
+                    'group_id' => $customer['group_id'] ?? null,
+                ]);
+            }
+        });
+
+        add_action(Brand::hook('customer/approved'), static function (array $payload) use ($changeLog): void {
+            $customer = $payload['customer'] ?? null;
+
+            if (is_array($customer) && isset($customer['id'])) {
+                $changeLog->record('customer', (int) $customer['id'], 'approved', [
+                    'name' => $customer['name'] ?? null,
+                    'group_id' => $customer['group_id'] ?? null,
+                ]);
+            }
+        });
+
+        add_action(Brand::hook('catalog/product_created'), static function (array $payload) use ($changeLog): void {
+            if (isset($payload['product_id'])) {
+                $changeLog->record('catalog', (int) $payload['product_id'], 'created');
+            }
+        });
+
+        // §15.4: a device that stops syncing raises one alert per device.
+        add_action('storekeeper_check_devices', static function () use ($container): void {
+            $minutes = (int) get_option(Brand::OPTION_PREFIX . 'device_stale_minutes', 10);
+
+            foreach ($container->get(DeviceService::class)->stale($minutes) as $device) {
+                $container->get(AlertService::class)->raise(
+                    AlertService::DEVICE_STALE,
+                    AlertService::WARNING,
+                    'device',
+                    (int) $device['id'],
+                    [
+                        'name' => $device['name'] ?? null,
+                        'last_sync_at' => $device['last_sync_at'] ?? null,
+                        'stale_after_minutes' => $minutes,
+                    ]
+                );
+            }
         });
 
         // A store request always runs with exactly one blog context (§6.4).

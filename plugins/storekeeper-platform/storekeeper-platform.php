@@ -24,20 +24,33 @@ if (is_file($storekeeperPlatformAutoload)) {
 }
 
 use StoreKeeper\Commerce\Core\Brand;
-use StoreKeeper\Commerce\Core\Database\Migrator;
 use StoreKeeper\Commerce\Core\Database\WpdbConnection;
+use StoreKeeper\Platform\Platform;
 
 /**
  * Network activation: create the platform tables once at network level (§8.6).
- * Subsite provisioning (§17.2) runs the per-store migrations.
+ * Subsite provisioning (§17.2) runs the per-store migrations when a tenant is
+ * created, not here.
  */
 register_activation_hook(__FILE__, static function (): void {
     global $wpdb;
 
     $connection = new WpdbConnection($wpdb);
-    (new Migrator($connection, dirname(__DIR__, 2) . '/plugins/storekeeper-commerce/migrations/network', $connection->networkPrefix()))->migrate();
+    (new \StoreKeeper\Commerce\Core\Database\Migrator(
+        $connection,
+        Platform::migrationsRoot(),
+        $connection->networkPrefix()
+    ))->migrate();
 
     if (function_exists('update_site_option')) {
-        update_site_option(Brand::OPTION_PREFIX . 'platform_schema', '0001_platform');
+        update_site_option(Brand::OPTION_PREFIX . 'platform_schema', '0002_platform_jobs');
     }
 });
+
+add_action('plugins_loaded', static function (): void {
+    if (!is_multisite()) {
+        return;
+    }
+
+    Platform::boot();
+}, 30);

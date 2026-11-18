@@ -194,3 +194,37 @@ Merchants register the webhook URL shown in **Payment gateways**:
 | GET | `/staff` | `manage_staff` | Store users with role and whether they may confirm payments, plus the role list. Read-only. |
 | GET | `/alerts` | `view_reports` | `?type=`; open alerts only. |
 | POST | `/alerts/{id}/resolve` | `resolve_alerts` | Body: optional `resolution`. |
+
+## POS (§15)
+
+Device-token routes take `Device: <token>` (the `skd_…` value returned once at
+registration) instead of a WordPress cookie. Staff routes use the normal cookie
+and capability.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/pos/devices` | `register_devices` | Registered devices with location name. |
+| POST | `/pos/devices` | `register_devices` | Body: `name`, `location_id`, optional `app_version`. Returns the device and a one-time `token` (inside `data` and at the top level). |
+| POST | `/pos/devices/{uuid}/revoke` | `register_devices` | The token stops working immediately. |
+| GET | `/pos/staff` | device token | `{user_id, name, has_pin}` for store roles, so a cashier can pick their name. |
+| POST | `/pos/pins` | `manage_staff` | Body: `user_id`, `pin` (4–6 digits). |
+| POST | `/pos/cashier/verify` | device token | Body: `user_id`, `pin`. `200 {ok:true}` or `422` with `reason` (`wrong_pin`, `locked`, `no_pin`). |
+| POST | `/pos/counter-sales` | device token | Body: `client_uuid`, `cashier_user_id`, `lines` (`variant_id` or `variant_uuid`, `qty`, optional `pack_unit_id`, `unit_price_kobo`), `payments` (`method`, `amount_kobo`), optional `customer_id`, `discount_kobo`, `client_created_at`, `note`. Returns the order, items, `warnings`. |
+| POST | `/pos/counter-returns` | device token | Body: `client_uuid`, `order_uuid` or `order_number`, `lines` (`order_item_id`, `qty_pieces`), `reason`, optional `restock` (default true), `method`. |
+| POST | `/pos/cash-ups` | device token | Body: `cashier_user_id`, optional `business_date`, `opening_float_kobo`, `counted_cash_kobo`, `note`. Returns expected and difference. |
+| GET | `/pos/held` | device token | Parked (draft) sales for this device, with items. |
+| POST | `/pos/held` | device token | Park a sale; same body as a counter sale minus payments. |
+| DELETE | `/pos/held/{id}` | device token | Discard a parked sale. |
+
+## Sync (§15.3)
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/sync/pull` | device token | `?cursor=`; returns `cursor`, `full_resync_required`, `catalog`, `pack_units`, `prices`, `groups`, `customer_prices`, `stock_levels`, `customer_changes`, `order_changes`, `settings`, `server_time`. |
+| POST | `/sync/push` | device token | Body: `{batch_uuid, operations:[…]}` with operations `counter_sale`, `counter_return`, `cash_up`, `customer_create`. Returns `results` (`applied`/`duplicate`/`rejected`), `replayed`, `stock_levels`. A resent `batch_uuid` returns the stored result. |
+
+## Platform (§17)
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| POST | `/storekeeper-platform/v1/webhook` | Paystack signature | `x-paystack-signature` = HMAC-SHA512(raw body, platform secret). `503` when `storekeeper_platform_paystack_secret` is unset, `401` on a bad signature. Handles `charge.success`, `invoice.payment_failed`/`charge.failed`, `subscription.disable`. |

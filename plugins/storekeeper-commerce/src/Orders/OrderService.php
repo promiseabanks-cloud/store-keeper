@@ -445,7 +445,12 @@ final class OrderService
 
         $payments = $this->orders->payments($orderId);
         $paid = 0;
-        $refunded = 0;
+        // Refunds are recorded by the refund/return flows and never by hand;
+        // the payment status derives from what was actually given back (§12.2).
+        $refunded = (int) $this->db->scalar(
+            sprintf('SELECT COALESCE(SUM(amount_kobo), 0) FROM %srefunds WHERE order_id = ?', $this->db->prefix()),
+            [$orderId]
+        );
         $paymentRows = [];
 
         foreach ($payments as $payment) {

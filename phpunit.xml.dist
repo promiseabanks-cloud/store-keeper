@@ -14,6 +14,9 @@
         <testsuite name="integration">
             <directory>plugins/storekeeper-commerce/tests/Integration</directory>
         </testsuite>
+        <testsuite name="platform">
+            <directory>plugins/storekeeper-commerce/tests/Platform</directory>
+        </testsuite>
     </testsuites>
 
     <source>

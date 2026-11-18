@@ -71,6 +71,9 @@ add_action('plugins_loaded', static function (): void {
     \StoreKeeper\Commerce\Storefront\Storefront::register($storefront);
     \StoreKeeper\Commerce\Storefront\Blocks::register($storefront);
 
+    // Phase 5: the installable POS app at /pos/ (§15.1).
+    \StoreKeeper\Commerce\Pos\PosPage::register();
+
     add_action('rest_api_init', static function () use ($container): void {
         $api = new Api(
             $container->get(IdempotencyService::class),
@@ -110,6 +113,17 @@ add_action('plugins_loaded', static function (): void {
         (new \StoreKeeper\Commerce\Rest\ShippingController(
             $container->get(\StoreKeeper\Commerce\Shipping\ShippingService::class),
             $api
+        ))->register();
+
+        (new \StoreKeeper\Commerce\Rest\PosController(
+            $container->get(\StoreKeeper\Commerce\Pos\DeviceService::class),
+            $container->get(\StoreKeeper\Commerce\Pos\CounterService::class),
+            $api
+        ))->register();
+
+        (new \StoreKeeper\Commerce\Rest\SyncController(
+            $container->get(\StoreKeeper\Commerce\Pos\SyncService::class),
+            $container->get(\StoreKeeper\Commerce\Pos\DeviceService::class)
         ))->register();
 
         (new \StoreKeeper\Commerce\Rest\WebhookController(

@@ -220,7 +220,16 @@ wp eval '$c=\StoreKeeper\Commerce\Core\Plugin::container();
 With that data, `/checkout/` shows pickup always and the Lagos rider option once
 the state/LGA fields say Lagos (`/checkout/?state=Lagos&lga=Ikeja`). A state with
 no zone and no catch-all shows pickup only. `wp rewrite flush` is required once
-after deploying the new `track/` rewrite rule.
+after deploying the new `track/` and `pos/` rewrite rules.
+
+### POS
+
+`/ladies-corner/pos/` serves the standalone POS app (D-039). A manager signed into
+wp-admin registers the device with a name and location; the returned `skd_…`
+token is kept in the browser's `localStorage`. Set a cashier PIN as a manager
+through the app's **Menu → Cashier PINs** (or `POST /pos/pins` with a cookie and
+`manage_staff`) before signing in. `wp rewrite flush` is required after deploying.
+The page is not covered by browser tests; open it once after a preview rebuild.
 
 Order `SK-00002` in the preview has one parcel packed and dispatched (GIG Logistics,
 waybill `GIG-7781`, rider Musa `08035550000`), so
