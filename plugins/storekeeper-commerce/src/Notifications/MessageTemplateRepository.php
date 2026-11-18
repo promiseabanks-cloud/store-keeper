@@ -25,6 +25,35 @@ final class MessageTemplateRepository
         );
     }
 
+    /** @return array<string,mixed>|null an override whatever its active state */
+    public function findAny(string $event, string $channel): ?array
+    {
+        return $this->db->first(
+            sprintf(
+                'SELECT * FROM %smessage_templates WHERE event = ? AND channel = ? ORDER BY id DESC LIMIT 1',
+                $this->db->prefix()
+            ),
+            [$event, $channel]
+        );
+    }
+
+    /** @return list<array<string,mixed>> every stored override */
+    public function all(): array
+    {
+        return $this->db->select(
+            sprintf('SELECT * FROM %smessage_templates ORDER BY event ASC, channel ASC', $this->db->prefix())
+        );
+    }
+
+    /** Remove the store's override so the code default applies again. */
+    public function forget(string $event, string $channel): void
+    {
+        $this->db->delete($this->db->prefix() . 'message_templates', [
+            'event' => $event,
+            'channel' => $channel,
+        ]);
+    }
+
     /** @param array<string,mixed> $data */
     public function upsert(array $data): int
     {

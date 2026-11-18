@@ -222,6 +222,54 @@ final class ShipmentTest extends TestCase
         self::assertSame(18, (int) $this->store->inventory->level($this->variantId, $this->locationId)['on_hand']);
     }
 
+    public function testTheToPackListNamesTheOrderAndRecipient(): void
+    {
+        $order = $this->order(2, [
+            'shipping_address' => [
+                'recipient_name' => 'Ada Obi',
+                'phone_e164' => '+2348031234567',
+                'method' => 'delivery',
+                'line1' => '12 Balogun Street',
+                'lga' => 'Lagos Island',
+                'state' => 'Lagos',
+                'shipping_label' => 'Lagos Island delivery',
+            ],
+        ]);
+
+        $shipment = $this->store->shipments->create((int) $order['id'], [], $this->store->actor());
+
+        $rows = $this->store->shipments->toPack();
+
+        self::assertCount(1, $rows);
+        self::assertSame($shipment['uuid'], $rows[0]['uuid']);
+        self::assertSame($order['number'], $rows[0]['order']['number']);
+        self::assertSame('Ada Obi', $rows[0]['order']['recipient_name']);
+        self::assertSame('+2348031234567', $rows[0]['order']['phone']);
+        self::assertSame('12 Balogun Street', $rows[0]['order']['line1']);
+        self::assertSame('Lagos', $rows[0]['order']['state']);
+        self::assertSame(2, $rows[0]['pieces']);
+        self::assertSame('Not packed yet', $rows[0]['status_label']);
+
+        $this->store->shipments->update((int) $shipment['id'], ['status' => 'packed'], $this->store->actor());
+
+        self::assertSame([], $this->store->shipments->toPack(), 'A packed parcel leaves the to-pack list');
+        self::assertCount(1, $this->store->shipments->listing(ShipmentStatus::PACKED));
+        self::assertCount(1, $this->store->shipments->listing(), 'No status filter lists every parcel');
+    }
+
+    public function testOneParcelCarriesItsOrderForThePackingSlip(): void
+    {
+        $order = $this->order(1, [
+            'shipping_address' => ['recipient_name' => 'Ada Obi', 'phone_e164' => '+2348031234567'],
+        ]);
+
+        $shipment = $this->store->shipments->create((int) $order['id'], [], $this->store->actor());
+
+        self::assertSame($order['number'], $shipment['order']['number']);
+        self::assertSame('Ada Obi', $shipment['order']['shipping_address']['recipient_name']);
+        self::assertStringStartsWith('Gold hoop earrings', (string) $shipment['items'][0]['product_name']);
+    }
+
     /** @param array<string,mixed> $overrides */
     private function order(int $qty, array $overrides = []): array
     {

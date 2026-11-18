@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace StoreKeeper\Commerce\Notifications;
 
+use StoreKeeper\Commerce\Core\Audit\Actor;
+use StoreKeeper\Commerce\Core\Audit\AuditLogger;
 use StoreKeeper\Commerce\Core\Clock;
+use StoreKeeper\Commerce\Core\Exception\ValidationFailed;
 
 /**
  * Templates, the outbox and delivery attempts (§12).
@@ -25,6 +28,7 @@ final class MessageService
         private readonly MessageLogRepository $logs,
         private readonly array $channels,
         private readonly Clock $clock,
+        private readonly ?AuditLogger $audit = null,
     ) {
     }
 
@@ -125,6 +129,161 @@ final class MessageService
     public function pending(): int
     {
         return $this->logs->countQueued();
+    }
+
+    /**
+     * The outbox as the Messages screen reads it (§12.4).
+     *
+     * @return array{rows:list<array<string,mixed>>,counts:array<string,int>}
+     */
+    public function recent(?string $status, int $limit = 100): array
+    {
+        if ($status !== null && $status !== '' && !in_array($status, ['queued', 'sent', 'failed'], true)) {
+            throw new ValidationFailed('Unknown message status.', ['status' => 'queued, sent or failed.']);
+        }
+
+        $rows = array_map(static fn (array $row): array => [
+            'id' => (int) $row['id'],
+            'event' => (string) $row['event'],
+            'channel' => (string) $row['channel'],
+            'category' => (string) $row['category'],
+            'recipient' => (string) $row['recipient'],
+            'subject' => $row['subject'] === null ? null : (string) $row['subject'],
+            'body' => $row['body'] === null ? null : (string) $row['body'],
+            'order_id' => $row['order_id'] === null ? null : (int) $row['order_id'],
+            'customer_id' => $row['customer_id'] === null ? null : (int) $row['customer_id'],
+            'status' => (string) $row['status'],
+            'attempts' => (int) $row['attempts'],
+            'provider_message_id' => $row['provider_message_id'] === null ? null : (string) $row['provider_message_id'],
+            'error' => $row['error'] === null ? null : (string) $row['error'],
+            'created_at' => (string) $row['created_at'],
+            'updated_at' => (string) $row['updated_at'],
+        ], $this->logs->recent($status, min(200, max(1, $limit))));
+
+        return ['rows' => $rows, 'counts' => $this->logs->counts()];
+    }
+
+    /**
+     * Every event with the code default and the store's override, if any.
+     * The screen edits the rendered copy, so an inactive override is shown too.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function templates(): array
+    {
+        $rows = [];
+
+        foreach (Templates::events() as $event) {
+            $default = Templates::default($event);
+
+            if ($default === null) {
+                continue;
+            }
+
+            $channel = (string) $default['channel'];
+            $override = $this->templates->findAny($event, $channel);
+            $active = $override !== null && (int) $override['is_active'] === 1;
+
+            $rows[] = [
+                'event' => $event,
+                'channel' => $channel,
+                'category' => (string) $default['category'],
+                'subject' => $active && $override['subject'] !== null
+                    ? (string) $override['subject']
+                    : (string) $default['subject'],
+                'body' => $active ? (string) $override['body'] : (string) $default['body'],
+                'default_subject' => (string) $default['subject'],
+                'default_body' => (string) $default['body'],
+                'is_overridden' => $active,
+                'is_active' => $active,
+                'placeholders' => self::placeholders((string) $default['subject'] . ' ' . (string) $default['body']),
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Save a store override for one event, or `reset: true` to fall back to the
+     * code default. Editing the copy never touches already queued messages: they
+     * store their rendered subject and body (D-032).
+     *
+     * @param array<string,mixed> $input subject, body, is_active, reset
+     * @return array<string,mixed> the event's row in {@see templates()}
+     */
+    public function saveTemplate(string $event, array $input, Actor $actor): array
+    {
+        $default = Templates::default($event);
+
+        if ($default === null) {
+            throw new ValidationFailed('Unknown message event.', ['event' => implode(', ', Templates::events())]);
+        }
+
+        $channel = (string) $default['channel'];
+        $existing = $this->templates->findAny($event, $channel);
+        $before = $existing === null ? null : [
+            'subject' => $existing['subject'] === null ? null : (string) $existing['subject'],
+            'body' => (string) $existing['body'],
+            'is_active' => (int) $existing['is_active'] === 1,
+        ];
+
+        if (!empty($input['reset'])) {
+            $this->templates->forget($event, $channel);
+
+            $this->audit?->log($actor, 'message.template_reset', 'message_template', $existing === null ? null : (int) $existing['id'], $before, null);
+
+            return $this->templateRow($event);
+        }
+
+        $subject = trim((string) ($input['subject'] ?? ''));
+        $body = trim((string) ($input['body'] ?? ''));
+
+        if ($subject === '') {
+            throw new ValidationFailed('A message needs a subject.', ['subject' => 'Required.']);
+        }
+
+        if ($body === '') {
+            throw new ValidationFailed('A message needs a body.', ['body' => 'Required.']);
+        }
+
+        $isActive = array_key_exists('is_active', $input) ? (bool) $input['is_active'] : true;
+
+        $id = $this->templates->upsert([
+            'event' => $event,
+            'channel' => $channel,
+            'language' => 'en',
+            'subject' => mb_substr($subject, 0, 255),
+            'body' => $body,
+            'is_active' => $isActive ? 1 : 0,
+        ]);
+
+        $this->audit?->log($actor, 'message.template_saved', 'message_template', $id, $before, [
+            'subject' => mb_substr($subject, 0, 255),
+            'body' => $body,
+            'is_active' => $isActive,
+        ]);
+
+        return $this->templateRow($event);
+    }
+
+    /** @return array<string,mixed> */
+    private function templateRow(string $event): array
+    {
+        foreach ($this->templates() as $row) {
+            if ($row['event'] === $event) {
+                return $row;
+            }
+        }
+
+        return [];
+    }
+
+    /** @return list<string> */
+    private static function placeholders(string $text): array
+    {
+        preg_match_all('/\{\{([a-z0-9_]+)\}\}/i', $text, $matches);
+
+        return array_values(array_unique($matches[1]));
     }
 
     /** @return array<string,mixed>|null */

@@ -1,293 +1,350 @@
 # Handover
 
-Written 2026-11-16 for whoever picks this up next (human or model). Read this
-first, then `docs/BRIEF.md` for requirements and `docs/DECISIONS.md` for every
-choice that deviates from it.
+Rewritten 2026-11-18. Read this first, then `docs/BRIEF.md` for requirements and
+`docs/DECISIONS.md` for every choice that deviates from it. Section 9 is the
+short version of "what is left".
 
 ## 1. What this is
 
 **Store Keeper** is a hosted commerce platform for Nigerian wholesalers and
 retailers, built on WordPress multisite. Each merchant is a subsite with its own
-store tables, staff, catalog, storefront, WhatsApp order desk and (later) POS. The
-engine is plain PHP with no knowledge of HTTP or HTML; screens call a REST API; the
-API calls the engine; only the engine writes to tables.
+store tables, staff, catalog, storefront, message outbox and POS. The engine is
+plain PHP with no knowledge of HTTP or HTML; screens call a REST API; the API
+calls the engine; only the engine writes to tables.
 
-- Working name: **Store Keeper** (final name is Q-002, all names come from
+- Working name: **Store Keeper** (final name is Q-002; every name comes from
   `plugins/storekeeper-commerce/src/Core/Brand.php`).
-- Brief: `docs/BRIEF.md` (2,095 lines, § references used everywhere).
-- Repo: `promiseabanks-cloud/store-keeper`, branch `main`, everything pushed.
-- Workspace: `/workspace/chats/bd9d595656ccf5a40359f69f` (Freebuff cloud chat).
+- Brief: `docs/BRIEF.md` (2,095 lines; § references are used everywhere).
+- Repo: `promiseabanks-cloud/store-keeper`, branch `main`.
+- Engine: `plugins/storekeeper-commerce/`; platform: `plugins/storekeeper-platform/`.
+- Theme: `theme/storekeeper-storefront/` (PHP templates + a product-grid block).
 
 ## 2. Where the build stands
 
-The brief schedules six phases (§22.2–§22.7). Implemented so far:
-
 | Brief phase | State | Notes |
 |---|---|---|
-| §22.1 Phase 0 (discovery) | Not recorded here | Owner-facing questions live in `OPEN_QUESTIONS.md`. |
-| §22.2 Phase 1 — Foundation | **Done** | Core constants, money, phone, DB abstraction, schema + migrations, capabilities, REST conventions, WP-CLI, CI. |
-| §22.3 Phase 2 — Back office | **Done** | Catalog, pricing resolution, stock ledger with reservations, orders, customers, back-office app shell and its read/write APIs. |
-| §22.4 Phase 3 — Orders, payments, notifications | **Payments, hold expiry, notifications, shipping and parcels done; the rest not** | Paystack, Flutterwave and OPay adapters, payment links and signed webhooks are shipped (OPay cannot go live without the merchant ID, Q-001b; no real charge has ever been made). Hold expiry runs hourly and via `wp storekeeper orders expire-holds`. Notifications: templates, outbox in `message_log`, order buyer/staff emails, shipment emails, hourly dispatch and `wp storekeeper messages dispatch`. Shipping: zones, areas and all five method types, quoted from the cart at checkout (D-037; real fees/LGA dataset are Q-013/Q-018). Parcels: multiple per order, per-parcel stock commit, dispatch details, POD collection, returns with optional restock, events timeline, bulk status, public `/track/{number}/?t=` page (D-038). **Not built:** WhatsApp/SMS adapters, message templates screen, message log screen, merchant alert delivery, courier API adapters (§13.3 v2), dispatch-sheet printing. |
-| §22.5 Phase 4 — Storefront | **Mostly done (catalogue, cart, checkout, sign-in, sign-up, account)** | Theme, `/shop/`, categories, search, product page with swatches and group pricing, block + shortcode, OG/canonical. Cart (`/cart/`), guest/retail checkout (`/checkout/`), phone + OTP sign-in (`/sign-in/`, `skf_session`), wholesale self-registration (`/register/`, pending approval honoured) and the account page (`/account/`: order history, repeat order, saved addresses) are shipped; a signed-in wholesale customer checks out at group prices and the order records `customer_id` and the group. Codes are emailed to the customer's address (D-036). The order and tracking pages now show the parcel timeline. **Not built:** WhatsApp/SMS delivery, editing a saved address from the account page, bank-transfer proof upload, product sitemap. |
-| §22.6 Phase 5 — POS + offline sync | **Engine and app done; not browser-tested** | `/pos/` installable page, device tokens, cashier PINs, counter sales/returns/cash-up, parked sales, pull/push sync with batch and per-operation idempotency, oversell alerts and device-stale alerts (D-039, `docs/POS.md`). Device/sync endpoints are rate limited and the storefront applies the offline safety buffer at a stale-device location (D-041). Thermal printers and a barcode camera are not built. |
-| §22.7 Phase 6 — Platform layer | **Engine, console and webhook done; provisioning not run live** | Plans + PlanGate + usage, applications, tenant provisioning with a step log, invoices, dunning ladder, verified Paystack webhook, owner console with audited impersonation (D-040, `docs/PLATFORM.md`). Paystack charge/subscription creation, custom domains/SSL and the revenue/health panes are not built. |
+| §22.1 Phase 0 (discovery) | Owner questions open | `docs/OPEN_QUESTIONS.md`. |
+| §22.2 Phase 1 — Foundation | **Done** | Constants, money, phone, DB abstraction, schema + migrations, capabilities, REST conventions, WP-CLI, CI. |
+| §22.3 Phase 2 — Back office | **Done** | Catalog, pricing resolution, stock ledger with reservations, orders, customers, locations, staff list, alerts, back-office app shell and its APIs. |
+| §22.4 Phase 3 — Orders, payments, notifications, shipping | **Engine and staff screens done; no real gateway has ever run** | Paystack/Flutterwave/OPay adapters, payment links, signed webhooks, hold expiry. Notifications: six templates with per-store overrides, `message_log` outbox, buyer/staff/shipment emails, hourly dispatch, WP-CLI dispatch and now the Messages screen (log + template editor + send now). Shipping: zones/areas and all five method types, quoted at checkout, with the Shipping screen. Parcels: multiple per order, per-parcel stock commit, dispatch details, POD collection, returns with optional restock, timeline, bulk pack, public tracking page, packing slips and dispatch sheets printed from the Parcels screen (D-038, D-043). **Not built:** WhatsApp/SMS adapters, merchant alert *delivery*, courier API adapters (§13.3 v2), bank-transfer proof upload. |
+| §22.5 Phase 4 — Storefront | **Mostly done** | Catalogue, search, categories, product page with swatches and group pricing, block + shortcode, OG/canonical. Cart, guest/retail checkout, phone + OTP sign-in, wholesale self-registration with approval, account page (order history, repeat order, saved addresses). Sign-in and sign-up codes are emailed (D-036). Order and tracking pages show the parcel timeline. **Not built:** WhatsApp/SMS delivery, editing a saved address, bank-transfer proof upload, product sitemap. |
+| §22.6 Phase 5 — POS + offline sync | **Engine and app done; never exercised in a browser or on a tablet** | `/pos/` installable page, device tokens, cashier PINs, counter sales/returns/cash-up, parked sales, pull/push sync with batch and per-operation idempotency, oversell and device-stale alerts (D-039). Device/sync routes are rate limited and the storefront applies the offline buffer at a stale-device location (D-041, D-042). **Not built:** thermal printing, barcode camera, browser/device validation. |
+| §22.7 Phase 6 — Platform layer | **Engine, console and webhook done; provisioning never run live** | Plans + PlanGate + usage, applications, tenant provisioning with a step log, invoices, dunning ladder, verified Paystack webhook, owner console with audited impersonation (D-040, `docs/PLATFORM.md`). **Not built:** Paystack charge/Plan/Subscription creation, custom domains/SSL, revenue/health panes. |
 
-**Numbering warning.** Commit messages and `docs/PHASE_*_REPORT.md` use an internal
-count that is one behind the brief: internal "Phase 2" = brief §22.3, internal
-"Phase 3" = brief §22.4 payments, internal "Phase 4" = the back-office remainder
-plus storefront, which the brief splits between §22.3 and §22.5. When in doubt,
-quote the brief section number.
+**Numbering warning.** Commit messages and `docs/PHASE_*_REPORT.md` use an
+internal count that is one behind the brief: internal "Phase 2" = brief §22.3,
+internal "Phase 3" = brief §22.4 payments, internal "Phase 4" = the back-office
+remainder plus storefront, which the brief splits between §22.3 and §22.5. Quote
+the brief section number when in doubt.
 
-Commit trail (oldest first relevant): `a1129bc` core → `71f82b5` WP integration →
-`312ea3e` engine → `ef58166` back-office shell + OPay + preview → `c5d38de` orders
-→ `1bf2be8` gateways → `22ed483` customers/prices/locations/staff/alerts →
+Commit trail (oldest first): `a1129bc` core → `71f82b5` WP integration →
+`312ea3e` engine → `ef58166` back office + OPay + preview → `c5d38de` orders →
+`1bf2be8` gateways → `22ed483` customers/prices/locations/staff/alerts →
 `2b2e9e8` back-office redesign → `63acd0a` storefront → `e8d87df` handover docs
-→ cart, checkout and hold expiry → notifications outbox → storefront sign-in → wholesale sign-up and account → email OTP delivery → shipping zones/methods and parcels (this increment).
+→ cart/checkout/hold expiry → notifications outbox → storefront sign-in →
+wholesale sign-up/account → email OTP → shipping zones and parcels → POS and
+sync → `26e88f1` POS rate limits + offline buffer → `14ae479` pull counts as a
+sync → the staff screens commit (Shipping, Parcels, Messages, and this handover).
 
-## 3. Intent — how the work is being run
+## 3. What exists today, by layer
 
-- Build in phase-sized increments. Each increment ends with: code, tests, docs
-  updated (`DECISIONS.md` for deviations, `OPEN_QUESTIONS.md` for owner
-  questions, a phase report or topic doc), one commit with § references, push to
-  `main`.
-- The user reviews visually through a browser preview and gives short, direct
-  direction ("I don't want the basic WordPress feel"). They expect visible
-  progress and honest reporting of what was and was not checked.
-- Do not invent product decisions. If the brief is silent, choose the smallest
-  option that unblocks work, record it as a `D-0xx`, and continue. If a decision
-  needs the owner (money, provider, legal), add a `Q-0xx` and use a placeholder.
-- Never fake a feature: no dead buttons, no stub that pretends to work. An honest
-  absence (e.g. no "add to cart" until the cart exists) is preferred.
+**Engine (`src/`)**
 
-## 4. Architecture map
+- `Core/` — Brand, Money (round-half-up in kobo), Phone (E.164), Uuid, Clock,
+  Container, `Connection` (`WpdbConnection` + `PdoConnection`), Installer,
+  SchemaMigrator, Idempotency, Audit (actor passed explicitly), Hooks, Crypto.
+- `Catalog/` — products, options, variants, media, categories.
+- `Pricing/` — `PricingService::resolve()` is the only price source: special price
+  → group tier → base tier → derived pack → `PriceNotFound`.
+- `Inventory/` — ledger, reservations, receipts, transfers, counts, locations,
+  availability (with the stale-device offline buffer).
+- `Customers/` — customers, groups, approvals, totals, OTP sessions.
+- `Orders/` — `OrderService` (create/pay/hand over/cancel/refresh), `ShipmentService`
+  (parcels, timeline, bulk status, listing), repositories.
+- `Payments/` — `GatewayAdapter` + Paystack/Flutterwave/OPay, `PaymentService`,
+  signed webhook handling, encrypted per-store settings.
+- `Shipping/` — zones, areas, five method types, quotes, group restrictions.
+- `Notifications/` — templates + overrides, outbox (`message_log`), hourly
+  dispatch, email/log channels, order and shipment notifications.
+- `Pos/` — devices, PINs, counter sales/returns/cash-up, held sales, change feed,
+  pull/push sync, rate limiter and device guard.
+- `Rest/` — thin controllers (catalog, inventory, orders, shipments, shipping,
+  messages, customers, pricing, alerts, staff, settings, POS, sync, webhooks).
+- `Admin/Menu.php` — wp-admin menu, body class, asset loading.
 
-```
-plugins/storekeeper-commerce/
-  storekeeper-commerce.php      bootstrap, activation, REST registration, WP-CLI
-  src/Core/                     Brand, Money, Phone, Uuid, Clock, Container,
-                                Connection (Wpdb + Pdo), Installer, SchemaMigrator,
-                                Idempotency, Audit, Hooks, Crypto
-  src/Catalog/                  products, options, variants, media, categories
-  src/Pricing/                  PricingService::resolve() is the only price source
-  src/Inventory/                stock ledger, reservations, receipts, transfers,
-                                counts, locations
-  src/Customers/                customers, groups, approvals, totals
-  src/Orders/                   OrderService: create, pay, hand over, cancel,
-                                refresh statuses
-  src/Payments/                 GatewayAdapter + Paystack/Flutterwave/OPay,
-                                PaymentService, PaymentRepository, settings
-  src/Shipping/                 zones, areas, method quotes (§13.3)
-  src/Orders/                   OrderService + ShipmentService/Repository
-  src/Pos/                      devices, PINs, counter sales, change feed, sync,
-                                rate limiter + device guard (§15)
-plugins/storekeeper-platform/src/
-  Plans/                        plans, PlanGate limits/features, usage counters
-  Applications/ Tenants/        application inbox and tenant records
-  Provisioning/                 step log + WordPress provisioner
-  Billing/                      invoices, dunning, Paystack event handling
-  Console/ Http/                owner console, platform webhook
-  src/Rest/                     thin controllers; no business logic
-  src/Admin/                    wp-admin menu, assets, body class
-  src/Storefront/               storefront read model, routes, cache, block
-  src/Alerts/ src/Reports/ src/Cli/
-  migrations/store/*.php        versioned schema (0001…0012), network/0001–0002
-  templates/storefront/         shop, product, not-found + parts
-  assets/admin/                 back-office app shell (CSS + React-in-wp.element)
-  assets/storefront/            storefront.css, product.js
-  blocks/product-grid/          block.json + plain-JS editor UI
-  tests/                        Unit + Integration against real MariaDB
-plugins/storekeeper-mu-loader/  load order + environment guards
-plugins/storekeeper-platform/   Phase 6 shell (empty)
-theme/storekeeper-storefront/   PHP-templated theme with block support (D-024)
-tools/preview/                  WP preview stack scripts + seed + demo photos
-docs/                           BRIEF, DECISIONS, OPEN_QUESTIONS, API, PREVIEW,
-                                DESIGN, STOREFRONT, PHASE_*_REPORT
-```
+**Back office (`assets/admin/`)** — `admin.js` (shell; Overview, Products, Orders,
+Customers, Prices, Locations, Staff, Gateways) and `screens.js` (Parcels,
+Shipping, Messages; print via `window.print()`). `docs/ADMIN.md` is the screen
+reference.
 
-Read model vs engine: `CatalogView` (storefront) is allowed to read tables with
-`Connection`, but it never writes. Everything that changes state goes through a
-service.
+**Storefront** — `theme/storekeeper-storefront/`, `src/Storefront/` (routes, view
+model, cart/checkout/auth actions, cache), `templates/storefront/`, one block.
 
-## 5. Invariants and traps (read before editing)
+**Platform** — plans/PlanGate, applications, provisioning step log, invoices,
+dunning, webhook, owner console with impersonation. Network migrations
+`network/0001–0002`; store migrations `0001–0013`.
 
-1. **`declare(strict_types=1);` everywhere** in `src/` and `tests/`. `$wpdb` hands
-   back numeric columns as strings — cast before arithmetic.
+## 4. Invariants and traps (read before editing)
+
+1. **`declare(strict_types=1);`** everywhere in `src/` and `tests/`. `$wpdb`
+   returns numeric columns as strings — cast before arithmetic.
 2. **SQL placeholders are `?`**, even though production is `$wpdb`.
-   `WpdbConnection::prepare()` rewrites `?` into `%d`/`%s` itself. Writing `%d`
-   in a query works only under `$wpdb` and breaks the PDO test driver (this bug
-   was shipped once and caught by tests). `sprintf` is only for table names.
-3. **Only services write.** Stock changes only through `InventoryService`
-   movements; prices only through `PricingService::setPrice`; orders only through
-   `OrderService`.
-4. **Prices always resolve through `PricingService::resolve()`** (special price →
-   group list tier → base list tier → derived pack → `PriceNotFound`). Do not
-   compute a price anywhere else. `PricingRepository::displayAmounts()` exists
-   only for product cards and mirrors that order.
-5. **Ledger locking order:** lock `stock_levels` row (`FOR UPDATE`) → insert
-   movement → apply delta, all in one transaction; hooks fire after commit (D-006,
-   D-012).
+   `WpdbConnection::prepare()` rewrites them. `%d`/`%s` works only under `$wpdb`
+   and breaks the PDO test driver (this bug shipped once). `sprintf` is only for
+   table names — count the `%s` placeholders, each needs its own prefix argument.
+3. **Only services write.** Stock only through `InventoryService` movements;
+   prices only through `PricingService::setPrice`; orders only through
+   `OrderService`; parcels only through `ShipmentService`; messages only through
+   `MessageService`.
+4. **Prices always resolve through `PricingService::resolve()`.**
+   `PricingRepository::displayAmounts()` exists only for product cards and mirrors
+   the same order.
+5. **Ledger locking:** lock the `stock_levels` row (`FOR UPDATE`) → insert the
+   movement → apply the delta, all in one transaction; hooks fire after commit
+   (D-006, D-012).
 6. **Reservations:** each line reserves from one location (first sellable with
-   stock, D-005). `on_hand - reserved` is availability; storefront availability
-   only sums locations with `sellable_online = 1 AND is_active = 1`, and subtracts
-   `offline_buffer_units` at a location whose active POS device is stale (D-041).
-   A successful pull or push counts as a sync, so a read-only tablet is not stale
-   (D-042); the check is indexed by `devices(location_id, status)`.
+   stock, D-005). `on_hand − reserved` is availability; storefront availability
+   sums only `sellable_online = 1 AND is_active = 1` locations and subtracts
+   `offline_buffer_units` at a location whose active device is stale (D-041). A
+   successful pull **or** push refreshes `last_sync_at` (D-042); the check is
+   indexed by `devices(location_id, status)`.
 7. **Hooks** are `storekeeper/{name}` (`Brand::hook()`), dispatched through
-   `Core\Hooks\Hooks` (`WpHooks` in production, `InMemoryHooks` in tests).
+   `Core\Hooks\Hooks` (`WpHooks` production, `InMemoryHooks` tests).
 8. **Storefront caching:** guest grids only, transient keyed by blog + price list
-   + category + limit; bumped by `catalog/product_created`, `stock/*`,
-   `order/*` via `Cache::flush()`. Signed-in customers bypass the cache entirely.
-   If you add a new state change that affects the shop, add its hook to
+   + category + limit; bumped by `catalog/product_created`, `stock/*`, `order/*`.
+   Signed-in customers bypass it. Add new state-changing hooks to
    `Storefront::register()`.
 9. **Storefront routes are rewrite rules** (`sk_view`, `sk_product`,
-   `sk_category`, `sk_page`, `sk_order`). After deploying, `wp rewrite flush` is
-   required once (activation already flushes). `redirect_canonical` is disabled for
-   these routes.
-10. **The storefront theme must be activated** and must find the plugin active;
-    `theme/storekeeper-storefront` calls the plugin's `Storefront::view()`.
+   `sk_category`, `sk_page`, `sk_order`); `wp rewrite flush` once after deploy.
+10. **The storefront theme must be activated** and must find the plugin active.
 11. **wp-admin chrome is hidden only on the Store Keeper screen.** Everything is
     scoped under `body.storekeeper-app` / `.sk-root`; primary buttons need
-    `body.storekeeper-app .sk-root .button.button-primary` to beat WordPress's
-    own rules. `html.wp-toolbar:has(body.storekeeper-app)` removes the 32px
-    toolbar offset.
-12. **Block render callbacks must capture their dependencies explicitly** — a
-    static method without the `$view` parameter silently got `null` and fataled
-    (fixed in `Blocks::loadGrid`). Keep the callback signature `(array $attributes)`.
+    `body.storekeeper-app .sk-root .button.button-primary`.
+12. **Block render callbacks must capture dependencies explicitly** — a static
+    callback without `$view` silently got `null` (fixed in `Blocks::loadGrid`).
 13. **`wp eval-file` evaluates the file**, so scripts under `tools/preview/` must
     not start with `declare(strict_types=1)`.
-14. **`wp search-replace` is required whenever the preview hostname changes** —
-    `SK_PREVIEW_HOST`, `DOMAIN_CURRENT_SITE` in `wp-config.php`, then the DB. See
+14. **`wp search-replace` whenever the preview hostname changes** — see
     `docs/PREVIEW.md`.
-15. **No product decisions in code**: gateway credentials, plan prices, product
-    name, provider choices are placeholders or settings, never hard-coded values.
+15. **No product decisions in code:** credentials, plan prices, the product name,
+    provider choices and shipping fees are settings or placeholders.
 16. **The cart stores choices, not money.** `CartService::summary()` re-resolves
-    every line through `PricingService` and reads availability from the ledger on
-    every request; never add a `price_kobo` column to `cart_items` and never trust
-    a posted variant price.
-17. **POS writes go through the same services.** A counter sale is an `OrderService` order with `handed_over_now`; it must never insert an order or a movement itself. `client_uuid` is the order idempotency key and `batch_uuid` stores the push result — never drop either when adding an operation. Offline prices are honoured by design (D-039); do not "correct" them to the current price.
-18. **Platform tables use `networkPrefix()`.** The platform plugin runs network-wide, so reading a store table from it is a bug; `PlanGate` takes the count from the caller instead.
+    every line and reads availability on every request.
+17. **POS writes go through the same services.** A counter sale is an
+    `OrderService` order with `handed_over_now`; `client_uuid` is the order
+    idempotency key and `batch_uuid` stores the push result. Offline prices are
+    honoured by design (D-039).
+18. **Platform tables use `networkPrefix()`;** the platform never reads a store
+    table (`PlanGate` takes the count from the caller).
 19. **Checkout composes, it does not compute.** `CheckoutService` validates the
-    shopper and picks the shipping fee, then calls `OrderService::create()` — which
-    re-prices and reserves in one transaction. Guest orders are deliberately not
-    attached to an existing customer record (D-027).
+    shopper and picks the shipping fee, then calls `OrderService::create()`.
+20. **Printing is a browser concern.** Packing slips/dispatch sheets render
+    through `wp.element.createPortal` into `.sk-print` on `document.body`; the
+    print stylesheet hides the app shell. Do not add a PDF library or courier
+    call to make a sheet "work" without an owner decision.
 
-## 6. Running things
+## 5. Running things
 
 ### Tests
 
-Needs PHP 8.2+ (repo has no local PHP; the preview stack provides one) and a real
-MariaDB on `127.0.0.1:3307`, database `storekeeper_test` (D-004; SQLite is not
-supported).
+Needs PHP 8.2+ and a real MariaDB on `127.0.0.1:3307`, database
+`storekeeper_test` (D-004; SQLite is not supported). `phpunit.xml.dist` supplies
+`SK_TEST_DSN`/`SK_TEST_DB_USER`/`SK_TEST_DB_PASS`.
 
 ```bash
 php vendor/bin/phpunit                       # all suites
-php vendor/bin/phpunit --filter StorefrontTest
+php vendor/bin/phpunit --filter ShipmentTest
 composer lint                                # php -l over every plugin file
 ```
 
-Last green run: **232 tests, 1,914 assertions** (POS, sync, POS safety and platform included).
+**Last green run: 238 tests, 1,952 assertions** (this increment; the suite was 232
+tests before it). `vendor/` is present after a checkpoint restore; there is no
+`composer` binary, so do not try to reinstall dependencies unless needed.
+
+### Rebuilding the test runner on a bare Freebuff VM (no sudo)
+
+`/tmp` is wiped on archive/restore, so this is often the first job. There is no
+root; download a static PHP and extract the MariaDB debs into a prefix.
+
+```bash
+mkdir -p /tmp/wsp-tools /tmp/wsp-root /tmp/wsp-debs
+cd /tmp/wsp-tools
+curl -fsSL -o php.tar.gz https://dl.static-php.dev/static-php-cli/common/php-8.4.23-cli-linux-x86_64.tar.gz
+tar -xzf php.tar.gz && chmod +x php
+
+cd /tmp/wsp-debs
+base=https://archive.ubuntu.com/ubuntu/pool/universe/m/mariadb
+curl -fsSLO $base/mariadb-server-core_10.11.14-0ubuntu0.24.04.1_amd64.deb
+curl -fsSLO $base/mariadb-client-core_10.11.14-0ubuntu0.24.04.1_amd64.deb
+curl -fsSLO $base/mariadb-server-10.5_10.11.14-0ubuntu0.24.04.1_amd64.deb
+curl -fsSLO https://archive.ubuntu.com/ubuntu/pool/main/libu/liburing/liburing2_2.5-1build1_amd64.deb
+curl -fsSLO https://archive.ubuntu.com/ubuntu/pool/main/n/numactl/libnuma1_2.0.18-1ubuntu0.24.04.1_amd64.deb
+for d in *.deb; do dpkg-deb -x "$d" /tmp/wsp-root; done
+
+export LD_LIBRARY_PATH=/tmp/wsp-root/usr/lib/x86_64-linux-gnu
+mkdir -p /tmp/wsp-tools/mysql-data
+/tmp/wsp-root/usr/bin/mariadb-install-db --no-defaults --basedir=/tmp/wsp-root/usr \
+  --datadir=/tmp/wsp-tools/mysql-data --auth-root-authentication-method=normal --skip-test-db
+nohup /tmp/wsp-root/usr/sbin/mariadbd --no-defaults --basedir=/tmp/wsp-root/usr \
+  --datadir=/tmp/wsp-tools/mysql-data --port=3307 --bind-address=127.0.0.1 \
+  --socket=/tmp/wsp-tools/mysql.sock --pid-file=/tmp/wsp-tools/mysql.pid \
+  --innodb-buffer-pool-size=64M >/tmp/wsp-tools/mysqld.log 2>&1 &
+/tmp/wsp-root/usr/bin/mariadb --no-defaults --socket=/tmp/wsp-tools/mysql.sock -uroot \
+  -e "CREATE DATABASE IF NOT EXISTS storekeeper_test"
+```
+
+Then run `/tmp/wsp-tools/php vendor/bin/phpunit`. The package names above are the
+ones that exist in the Ubuntu 24.04 pool today (`mariadb-server-10.5`,
+`mariadb-client-core`); a `404` means the version moved, so list the pool
+directory and use the current filenames.
 
 ### Preview site
 
-The preview stack lives in `/tmp`, **which is not checkpointed**: it disappears when
-the runner moves or restarts. At the time of writing it is gone (PHP, MariaDB,
-WordPress and the seeded subsite), so the first job in a fresh session is usually a
-rebuild. Full steps: `docs/PREVIEW.md`. Short version:
+The preview stack also lives in `/tmp` and does not survive a restore. Full steps:
+`docs/PREVIEW.md`. Short version: static PHP 8.3, WP-CLI, MariaDB on 3307, WordPress
+multisite in `/tmp/wsp-preview/wordpress`, symlinked plugins, subsite
+`ladies-corner` (blog 2), `wp storekeeper migrate --network`, seed with
+`tools/preview/seed.php`, theme activated, `wp rewrite flush`, demo photos, then
+`tools/preview/start.sh` on `0.0.0.0:3000` and `cloud_show_dev_server(3000)`.
 
-1. Download PHP 8.3 (static build) into `/tmp/wsp-tools/php`, WP-CLI into
-   `/tmp/wsp-tools/wp-cli.phar`, MariaDB 11.4 into `/tmp/wsp-tools/`.
-2. Start MariaDB on 127.0.0.1:3307 with socket `/tmp/wsp-tools/mysql.sock`.
-3. `wp core download` into `/tmp/wsp-preview/wordpress`, write `wp-config.php`
-   (multisite, `SK_PREVIEW_HOST`, `WP_HOME`/`WP_SITEURL` from `HTTP_HOST`,
-   `WP_DEBUG_LOG`), install, enable multisite, symlink the plugins, network
-   activate, create subsite `ladies-corner` (blog 2), `wp storekeeper migrate
-   --network`, seed with `SK_SEED_BLOG=2 … eval-file tools/preview/seed.php`.
-4. Symlink and activate the theme, `wp rewrite flush`, then
-   `wp eval-file tools/preview/demo-photos.php` for placeholder product photos.
-5. `tools/preview/start.sh` serves `0.0.0.0:3000`; show it with
-   `cloud_show_dev_server(3000)`.
+URLs: `/ladies-corner/`, `/ladies-corner/shop/`,
+`/ladies-corner/product/{slug}/`,
+`/ladies-corner/wp-admin/admin.php?page=storekeeper`.
 
-URLs: `/ladies-corner/` (home), `/ladies-corner/shop/`,
-`/ladies-corner/product/{slug}/`, `/ladies-corner/product-category/{slug}/`,
-`/ladies-corner/wp-admin/admin.php?page=storekeeper` (back office).
+Known preview quirks: the first navigation to wp-admin often bounces home
+(navigate twice); `*.style.dev` answers 403 to curl without the owner's session
+and that is not a bug; a logged-in WP admin bar appears on the storefront; the
+seed is not idempotent for locations; the preview uses the `log` notification
+transport, so codes and messages appear in the PHP error log.
 
-Known preview quirks: the first navigation to wp-admin often bounces to home
-(navigate twice); `*.style.dev` answers 403 to curl without the owner's session and
-that is not a bug; a logged-in WP admin bar appears on the storefront (real
-shoppers are not WP users); the seed is not idempotent for locations.
+## 6. Verification status — what is actually proven
+
+**Proven by the suite (238 tests):** money/phone/capabilities units; schema
+migrations; pricing resolution; ledger invariants and 50-buyer concurrency; order
+state machine, payments and holds; checkout/cart/shipping quotes; customers and
+approvals; storefront view/account; OTP; notifications outbox and template
+overrides; parcels (lifecycle, bulk, listing, slip data); POS counter sales and
+sync (incl. rate limits and the pull-as-sync buffer); tenant isolation; platform
+plans/billing/webhook.
+
+**Not proven at all:**
+
+- No real Paystack/Flutterwave/OPay charge, plan, subscription, refund or
+  webhook delivery. The adapters are exercised against fixtures only.
+- No live multisite provisioning; the provisioner has only been run against a
+  fake.
+- No browser or device test of `/pos/`, offline sync, the 429 path, or the
+  storefront safety buffer.
+- No browser test of the new Shipping, Parcels or Messages screens, including
+  printing; the REST routes have service-level coverage but no HTTP test.
+- No real email, SMS or WhatsApp delivery; the preview logs messages.
+- No courier, printer, bank-transfer proof upload or custom-domain/SSL work.
+
+The staff screens commit was verified by `php -l` on every changed PHP file,
+`node --check` on `admin.js` and `screens.js`, and a full green suite. Nothing
+was clicked through.
 
 ## 7. Deliberate limitations right now
 
-- **OTP delivery is email only.** `EmailOtpSender` emails the code to the address
-  on the customer's record; a customer with no address, or a mail transport that
-  refuses, falls back to the PHP error log. A live store therefore needs working
-  mail and a From address (Q-017) before a shopper receives a code. WhatsApp/SMS
-  is not built (Q-005, Q-006); Q-016 is answered as email for now.
-- **No storefront registration or account area.** Staff create customers and the
-  approval queue exists, but a visitor cannot apply as a wholesaler from the shop,
-  browse past orders or manage addresses.
+- **OTP delivery is email only.** A customer with no address, or a mail transport
+  that refuses, falls back to the PHP error log. WhatsApp/SMS is not built
+  (Q-005, Q-006); a live store needs working mail and a From address (Q-017).
+- **Notifications are email-only** at the provider level, though templates and
+  the outbox are now editable in the back office. No WhatsApp/SMS adapter, no
+  merchant alert *delivery* (alerts are read-only panes).
+- **Staff users are created in WordPress**, not in the Store Keeper screen
+  (D-021). Store roles limit capability, not data visibility.
+- **Virtual accounts, refunds and payment reconciliation are deferred** (D-019).
 - **Cart and checkout are server-rendered form posts, not REST** (D-028). Guests
-  have no REST identity, and a public write API needs rate limiting first.
-- **Staff screen is read-only** (D-021); people are created on the WP Users screen.
-- **Virtual accounts, refunds and reconciliation are deferred** (D-019).
-- **Sign-up and sign-in email the code.** Registration now asks for an email address, which is also where order confirmations go. The preview host runs the `log` transport, so it shows the code with the two switches in `PREVIEW.md` instead of sending mail.
-- **The account page is read-only** apart from repeating an order: saved addresses come from checkout and cannot be edited there yet.
-- **Notifications are email-only.** `message_log` queues order confirmations and staff alerts and dispatches them hourly, but there is no WhatsApp/SMS adapter (Q-005/Q-006) and no screen to edit templates or read the log; both are API/WP-CLI only. A preview host uses the `log` transport because it has no mail server.
-- **Back-office alerts** are read-only panes; there is no notification delivery for them.
+  have no REST identity and a public write API needs rate limiting first.
+- **The account page is read-only** apart from repeating an order; saved
+  addresses come from checkout and cannot be edited there.
 - **The storefront theme is PHP-templated, not a block theme** (D-024), and its
-  interactivity is vanilla JS, not the Interactivity API (D-025).
-- **POS is not browser-tested.** Device and sync routes are rate limited (120 requests/minute per device, 20 failed tokens/minute per IP, D-041) and the storefront subtracts `offline_buffer_units` at a stale-device location, but neither has been exercised in a browser. Receipts use the browser print dialog and there is no barcode-camera support (Q-021).
-- **Platform charging is not built.** The console records invoices and the webhook settles them, but it does not create a Paystack transaction, Plan or Subscription. Custom domains and SSL are not mapped (Q-019, Q-020).
+  interactivity is vanilla JS (D-025).
+- **POS has no thermal printing and no barcode camera** (Q-021); receipts use the
+  browser print dialog. Its rate limits and buffer policies are tested at the
+  service layer only.
+- **Platform charging is not built.** The console records invoices and the
+  webhook settles them; it does not create a Paystack transaction, Plan or
+  Subscription. Custom domains and SSL are not mapped (Q-019, Q-020).
 - **No product sitemap or structured data**; OG/canonical only.
-- **Nothing has been tested against a real gateway, a real phone, a real courier, a real device or a live Paystack platform account.**
+- **No imports/exports, no refunds screen, no dashboard charts.**
+- **Screenshots in `artifacts/` are untracked** on purpose
+  (`cart.png`, `checkout.png`, `order-received.png`).
 
-## 8. Open questions that matter next
+## 8. Open questions that block or shape the next work
 
 | # | Question | Why it matters now |
 |---|---|---|
-| Q-001b | OPay merchant ID + keys | OPay cannot go live; paste keys in Payment gateways once available. |
-| Q-002 | Product name and domain | Blocks branding, theme name, transactional copy. |
-| Q-004 | Pilot merchant(s) | The storefront gate ("pilot's website live on the same stock") needs one. |
-| Q-005 | WhatsApp route (Cloud API direct or BSP) | Blocks notifications and the WhatsApp order desk. |
-| Q-008 | Legal pages | The storefront has no privacy/terms template yet. |
+| Q-001b | OPay merchant ID + keys | OPay cannot go live; paste keys in Gateways when available. |
+| Q-002 | Product name and domain | Blocks branding, theme name and transactional copy. |
+| Q-003 | Plan prices and limits | The platform cannot charge without them (Q-020). |
+| Q-004 | Pilot merchant(s) | The storefront gate needs a real merchant and their catalogue. |
+| Q-005 | WhatsApp route (Cloud API direct or BSP) | Blocks the WhatsApp order desk and message delivery. |
+| Q-006 | SMS provider | Blocks SMS codes and alerts. |
+| Q-008 | Legal pages | No privacy/terms template on the storefront. |
 | Q-012 | Guest checkout allowed? | Shipped as yes for retail; confirm before launch. |
-| Q-013 | Launch delivery: pickup + one flat fee? | Checkout offers pickup, plus delivery only when `storekeeper_flat_shipping_kobo` is set. |
-| Q-014 | Hold policy: 30 min gateway / 24 h transfer? | Implemented as the brief states; expiry now cancels automatically. |
-
-## 9. Recommended next step
-
-All six brief phases now have their engine: the merchant core, the customer path,
-shipping/parcels, the POS with offline sync, and the platform layer. What remains
-is integration proof and the screens around the engines.
-
-Highest value next:
-
-- **Exercise the POS in a real browser and on an Android tablet**, including a
-  deliberate network cut and the 429 path. The engine and safety rails are
-  covered by 21 tests; the app is not.
-- **Staff screens for parcels and shipping settings** on the existing REST routes
-  (to-pack, dispatch sheet, packing slip, §14.2), plus the message log/templates
-  screen (§12.4).
-- **Platform billing charge creation** against the Owner's Paystack account, then
-  custom domains and SSL (Q-019, Q-020).
-- **Owner decisions still open:** plan prices (Q-003), real zone/fee data
-  (Q-013), the Nigerian LGA dataset (Q-018), WhatsApp/SMS (Q-005/Q-006), mail
-  From address (Q-017), OPay merchant ID (Q-001b), bank details (Q-015), POS
-  hardware (Q-021).
+| Q-013 | Launch delivery: pickup + one flat fee? | Checkout offers pickup, plus delivery only once methods exist. |
+| Q-014 | Hold policy: 30 min gateway / 24 h transfer? | Implemented as the brief states; expiry cancels automatically. |
+| Q-015 | Bank details for transfer | Stored as settings; still needed for live copy. |
+| Q-016 | Code channel | Answered as email for now (D-036). |
+| Q-017 | Mail From address / transport | Needed before a real code or receipt is sent. |
+| Q-018 | Nigerian LGA dataset + real zone fees | The shipping screen takes text areas; no LGA picker yet. |
+| Q-019 | Custom domains / SSL | Not built; platform tenancy works on subsites only. |
+| Q-020 | Platform billing account | Charge/Plan/Subscription creation not built. |
+| Q-021 | POS hardware | Decides whether thermal printing and a barcode camera are needed. |
 
 `docs/INTEGRATIONS.md` lists every credential still needed and where it plugs in.
 
-## 10. Document index
+## 9. What is left — recommended order
+
+1. **Prove the money path.** A test-mode Paystack charge end to end (payment link →
+   redirect → webhook on a public URL → `payments` row → order paid), then
+   Flutterwave and OPay if keys arrive. Nothing else matters as much.
+2. **Run the POS in a real browser and on an Android tablet**: install `/pos/`,
+   register a device, sell, cut the network, sell offline, re-connect, push,
+   pull, and hit the 429 and the stale-buffer view. Fix what the run reveals.
+3. **Platform billing**: create the Paystack transaction/Plan/Subscription behind
+   `POST /platform/invoices` (Q-003, Q-020), then custom domains/SSL (Q-019).
+4. **WhatsApp/SMS adapters** for OTP and order messages once Q-005/Q-006 are
+   answered; the `Channel` seam and the outbox already exist.
+5. **Remaining storefront gaps**: edit a saved address, bank-transfer proof
+   upload, product sitemap, WhatsApp order desk.
+6. **Operational polish**: merchant alert delivery, dispatch-of-messages retry
+   button (today a failed message is retried by the next dispatch), revenue and
+   health panes on the platform console.
+7. **Live provisioning**: run the WordPress provisioner against a throwaway
+   subsite, then a real application, and watch `platform_jobs` steps.
+
+Do not start with UI polish: the user has explicitly deferred front-end design.
+
+## 10. How the work is run
+
+- Phase-sized increments. Each ends with code, tests, docs (`DECISIONS.md` for
+  deviations, `OPEN_QUESTIONS.md` for owner questions, the topic doc and this
+  handover), one commit with § references, push to `main`.
+- Do not invent product decisions. If the brief is silent, choose the smallest
+  option that unblocks work, record a `D-0xx`, continue. If it needs the owner
+  (money, provider, legal), add `Q-0xx` and use a placeholder.
+- Never fake a feature: no dead buttons, no stub that pretends to work. An honest
+  absence is preferred.
+- Report honestly what was and was not verified. "Not clicked through" is the
+  correct ending when no browser ran.
+
+## 11. Document index
 
 | File | Read it for |
 |---|---|
 | `docs/BRIEF.md` | Requirements, phases, E2E tests, data model. |
-| `docs/DECISIONS.md` | Every deviation and why (D-001…D-041). Read before changing anything structural. |
+| `docs/DECISIONS.md` | Every deviation and why (D-001…D-043). Read before structural changes. |
 | `docs/OPEN_QUESTIONS.md` | What is waiting on the owner, and the placeholder in code. |
 | `docs/API.md` | Shipped endpoints, error codes, shapes. |
+| `docs/ADMIN.md` | Every back-office screen, capability, and the parcels/shipping/messages workflows. |
+| `docs/DESIGN.md` | Back-office shell, tokens, CSS rules, printing. |
 | `docs/PREVIEW.md` | Rebuilding the preview stack from zero. |
-| `docs/DESIGN.md` | Back-office shell, tokens, CSS rules. |
 | `docs/STOREFRONT.md` | Storefront routes, caching, swatches, theme install. |
 | `docs/POS.md` | `/pos/`, devices, PINs, counter sales/returns, sync protocol and its limits. |
 | `docs/PLATFORM.md` | Plans and enforcement, provisioning, platform billing, console, impersonation. |
+| `docs/INTEGRATIONS.md` | Credentials still needed and where they go. |
 | `docs/PHASE_*_REPORT.md` | What each phase delivered and what it skipped. |
+| `docs/ENGINEERING_ASSESSMENT.md` | Historical snapshot from the first engine review; some lines are stale (e.g. "no rate limiting" was true then). |

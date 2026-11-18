@@ -1135,10 +1135,13 @@
             ['dashboard', 'Overview', 'What needs attention today'],
             ['products', 'Products', 'Catalogue, variants and stock'],
             ['orders', 'Orders', 'Every sale, every channel'],
+            ['parcels', 'Parcels', 'Pack, dispatch and print'],
+            ['shipping', 'Shipping', 'Zones, fees and delivery'],
             ['customers', 'Customers', 'People and wholesale accounts'],
             ['prices', 'Prices', 'Price lists and quantity tiers'],
             ['locations', 'Locations', 'Shops and warehouses'],
             ['staff', 'Staff', 'Who works in this store'],
+            ['messages', 'Messages', 'Outbox and message templates'],
             ['settings', 'Gateways', 'Where customers pay you']
         ];
         var current = sections.filter(function (section) { return section[0] === tab; })[0] || sections[0];
@@ -1231,6 +1234,18 @@
                 })
                 : null,
 
+            tab === 'parcels'
+                ? (window.storekeeperScreens
+                    ? el(window.storekeeperScreens.Parcels)
+                    : el('p', { className: 'sk-empty' }, 'This screen did not load. Reload the page.'))
+                : null,
+
+            tab === 'shipping'
+                ? (window.storekeeperScreens
+                    ? el(window.storekeeperScreens.Shipping)
+                    : el('p', { className: 'sk-empty' }, 'This screen did not load. Reload the page.'))
+                : null,
+
             tab === 'customers'
                 ? el(Customers, {
                     rows: customers,
@@ -1268,6 +1283,12 @@
                     : el('p', { className: 'storekeeper-loading' }, 'Loading staff…'))
                 : null,
 
+            tab === 'messages'
+                ? (window.storekeeperScreens
+                    ? el(window.storekeeperScreens.Messages)
+                    : el('p', { className: 'sk-empty' }, 'This screen did not load. Reload the page.'))
+                : null,
+
             tab === 'settings'
                 ? (gateways
                     ? el(Gateways, { data: gateways, onSaved: setGateways })
@@ -1276,7 +1297,7 @@
 
             el('p', { className: 'sk-footnote' },
                 'Store Keeper · catalogue, stock, orders, customers, prices, payments and staff in one place. ' +
-                'The storefront and POS arrive in the next phases; this screen reads live data.')
+                'Storefront, POS and platform data all come from the same live store.')
                 )
             )
         );

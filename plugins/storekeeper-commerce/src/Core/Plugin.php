@@ -217,7 +217,8 @@ final class Plugin
                 $c->get(MessageTemplateRepository::class),
                 $c->get(MessageLogRepository::class),
                 $channels,
-                $c->get(Clock::class)
+                $c->get(Clock::class),
+                $c->get(Audit\AuditLogger::class)
             );
         });
         $container->singleton(OrderNotifications::class, static fn (Container $c): OrderNotifications => new OrderNotifications(

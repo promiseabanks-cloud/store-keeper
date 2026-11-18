@@ -59,6 +59,7 @@ final class Menu
 
             $base = dirname(__DIR__, 2);
             $script = $base . '/assets/admin/admin.js';
+            $screens = $base . '/assets/admin/screens.js';
             $style = $base . '/assets/admin/admin.css';
 
             wp_enqueue_style(
@@ -68,10 +69,20 @@ final class Menu
                 is_file($style) ? (string) filemtime($style) : '0.1.0'
             );
 
+            // Shipping, parcels and messages load first so admin.js can render
+            // them from window.storekeeperScreens.
+            wp_enqueue_script(
+                'storekeeper-screens',
+                plugins_url('assets/admin/screens.js', $base . '/storekeeper-commerce.php'),
+                ['wp-element', 'wp-api-fetch'],
+                is_file($screens) ? (string) filemtime($screens) : '0.1.0',
+                true
+            );
+
             wp_enqueue_script(
                 'storekeeper-admin',
                 plugins_url('assets/admin/admin.js', $base . '/storekeeper-commerce.php'),
-                ['wp-element', 'wp-api-fetch'],
+                ['wp-element', 'wp-api-fetch', 'storekeeper-screens'],
                 is_file($script) ? (string) filemtime($script) : '0.1.0',
                 true
             );

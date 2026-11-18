@@ -24,9 +24,10 @@ The engine and its HTTP-independent services are complete for this phase. REST c
 | Storefront auth | `/auth/*` | Phase 4 (not built) |
 | Storefront cart, checkout | storefront form posts (see below) | **Shipped as server-rendered forms, not REST** (D-028) |
 | Payments | `/orders/{uuid}/payment-link`, `/webhooks/{gateway}` | Shipped in Phase 3 (checkout, verify, signed webhooks); virtual accounts and refunds are not built yet |
-| Fulfilment | `/shipments/*`, `/track/{number}` | Phase 4 |
+| Fulfilment | `/shipments`, `/shipments/*`, `/track/{number}` | Shipped (D-038, D-043) |
+| Notifications | `/messages`, `/messages/dispatch`, `/messages/templates/{event}` | Shipped (D-032, D-043) |
 | POS / sync | `/devices/*`, `/sync/pull`, `/sync/push` | Phase 5 |
-| Imports, notifications, alerts, reports, settings, staff, platform | full list in brief §18 | Phases 2–6 |
+| Imports, alerts, reports, settings, staff, platform | full list in brief §18 | Alerts, settings, staff and platform shipped; imports and reports panes are not built |
 
 Error codes defined so far (mapped to HTTP status in `Rest\ErrorMapper` when controllers land):
 
@@ -112,9 +113,10 @@ accepts `message`. Fees are integers in kobo.
 
 | Method | Path | Capability | Notes |
 |---|---|---|---|
+| GET | `/shipments` | `create_orders` | `?status=&limit=`; every parcel with its order number, recipient name, phone, delivery address, method and piece count. `status=pending` is the to-pack list; no status lists everything, newest first. |
 | GET | `/orders/{uuid}/shipments` | `create_orders` | Parcels with their lines and timeline. |
 | POST | `/orders/{uuid}/shipments` | `update_shipments` | Body: optional `lines[{order_item_id,qty_pieces}]` (default: everything not packed or held by another pending parcel), optional `carrier`, `waybill_number`, `rider_name`, `rider_phone`, `method_name`, `photo_attachment_id`, `location_id`, `note`. Creates a `pending` parcel. |
-| GET | `/shipments/{uuid}` | `create_orders` | One parcel with lines and events. |
+| GET | `/shipments/{uuid}` | `create_orders` | One parcel with lines, events and its order (`number`, totals, shipping address) — everything a packing slip prints. |
 | PATCH | `/shipments/{uuid}` | `update_shipments` | Body: `status` and/or dispatch details (`carrier`, `waybill_number`, `rider_name`, `rider_phone`, `method_name`, `photo_attachment_id`, `note`), plus `restock` on a return and `collected_kobo` / `collection_method` on delivery. |
 | POST | `/shipments/bulk-status` | `update_shipments` | Body: `shipment_ids[]`, `status`. Returns `updated` and per-parcel `failed` messages; one bad parcel does not stop the rest. |
 
@@ -126,6 +128,17 @@ Packing commits that parcel's reservations; dispatch needs a carrier or method;
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | GET | `/track/{number}/?t={public_token}` | public token | Server-rendered page: items, totals, payment status, bank details, parcel timeline, carrier, waybill, rider phone. No token or a wrong token is a 404. |
+
+## Notifications (shipped)
+
+| Method | Path | Capability | Notes |
+|---|---|---|---|
+| GET | `/messages` | `create_orders` | `?status=queued\|sent\|failed&limit=`; newest first. Returns `data` (recipient, subject, body, status, attempts, error, timestamps) and `counts` for the three statuses. |
+| POST | `/messages/dispatch` | `manage_settings` | Sends queued messages now through the configured channel; returns `{sent, failed, remaining}`. The hourly job does the same. |
+| GET | `/messages/templates` | `create_orders` | Every event with the effective `subject`/`body`, the built-in `default_subject`/`default_body`, `is_overridden`, `is_active` and the `placeholders` the copy may use. |
+| PUT | `/messages/templates/{event}` | `manage_settings` | Body: `subject`, `body`, optional `is_active`. `{reset: true}` deletes the store override so the built-in copy applies again. A queued message keeps the copy it was rendered with (D-032). |
+
+A store with no override sends the built-in templates in `Notifications\Templates`; editing one writes a single `message_templates` row per event and channel. Unknown events return `422 validation_failed`.
 
 ## Sign-up and account (shipped, storefront forms)
 

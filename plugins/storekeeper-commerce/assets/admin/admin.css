@@ -788,3 +788,100 @@ body.storekeeper-app .sk-root .button.button-primary:focus {
         max-width: none;
     }
 }
+
+/* ---- Shipping, parcels and messages (§12.2, §13.3, §14.2) ---- */
+
+.sk-root .sk-parcel-detail {
+    margin-top: 18px;
+}
+
+.sk-root .sk-parcel-detail h3 {
+    margin: 18px 0 8px;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.sk-root .sk-parcel-action {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.sk-root .sk-message-body {
+    max-width: 420px;
+    white-space: pre-wrap;
+}
+
+.sk-root .sk-placeholder {
+    margin-right: 6px;
+}
+
+.sk-root .sk-chip-muted {
+    margin-right: 4px;
+}
+
+.sk-print {
+    display: none;
+}
+
+@media print {
+    body.storekeeper-app #wpadminbar,
+    body.storekeeper-app #adminmenumain,
+    body.storekeeper-app #wpfooter,
+    body.storekeeper-app #screen-meta-links,
+    body.storekeeper-app .sk-shell,
+    body.storekeeper-app .notice,
+    body.storekeeper-app .storekeeper-loading {
+        display: none !important;
+    }
+
+    body.storekeeper-app #wpcontent,
+    body.storekeeper-app #wpbody,
+    body.storekeeper-app #wpbody-content {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .sk-print {
+        display: block !important;
+        margin: 0;
+        padding: 0;
+        color: #000;
+        background: #fff;
+        font-size: 12pt;
+    }
+
+    .sk-print h1 {
+        margin: 0 0 4px;
+        font-size: 18pt;
+    }
+
+    .sk-print h2 {
+        margin: 0 0 12px;
+        font-size: 14pt;
+    }
+
+    .sk-print table {
+        width: 100%;
+        margin: 10px 0;
+        border-collapse: collapse;
+    }
+
+    .sk-print th,
+    .sk-print td {
+        padding: 4px 6px;
+        border: 1px solid #999;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    .sk-print-strong {
+        font-weight: 700;
+    }
+
+    .sk-print-muted {
+        margin-top: 18px;
+        color: #555;
+    }
+}

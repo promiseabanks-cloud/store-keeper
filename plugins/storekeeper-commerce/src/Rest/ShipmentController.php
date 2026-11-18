@@ -28,6 +28,12 @@ final class ShipmentController
     {
         $namespace = Brand::REST_NAMESPACE;
 
+        register_rest_route($namespace, '/shipments', [
+            'methods' => 'GET',
+            'callback' => [$this, 'listing'],
+            'permission_callback' => Api::requireCapability(Capabilities::CREATE_ORDERS),
+        ]);
+
         register_rest_route($namespace, '/orders/(?P<uuid>[0-9a-fA-F-]{36})/shipments', [
             [
                 'methods' => 'GET',
@@ -59,6 +65,23 @@ final class ShipmentController
             'callback' => [$this, 'bulkStatus'],
             'permission_callback' => Api::requireCapability(Capabilities::UPDATE_SHIPMENTS),
         ]);
+    }
+
+    /** Parcels across orders: the "to pack" list and the dispatch board. */
+    public function listing(\WP_REST_Request $request): \WP_REST_Response|\WP_Error
+    {
+        try {
+            $status = trim((string) ($request->get_param('status') ?? ''));
+
+            return new \WP_REST_Response([
+                'data' => $this->shipments->listing(
+                    $status === '' ? null : $status,
+                    (int) ($request->get_param('limit') ?: 100)
+                ),
+            ], 200);
+        } catch (StoreKeeperException $error) {
+            return ErrorMapper::toWpError($error);
+        }
     }
 
     public function index(\WP_REST_Request $request): \WP_REST_Response|\WP_Error

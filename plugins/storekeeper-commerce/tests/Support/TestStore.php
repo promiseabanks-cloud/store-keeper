@@ -242,7 +242,8 @@ final class TestStore
             $this->templateRepository,
             $this->messageLog,
             ['email' => $this->channel],
-            $this->clock
+            $this->clock,
+            $this->audit
         );
         $this->orderNotifications = new OrderNotifications($this->messages);
 

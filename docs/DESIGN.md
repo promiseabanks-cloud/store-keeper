@@ -60,5 +60,16 @@ tracking, stat numbers 30 px tabular.
 ## Files
 
 - `assets/admin/admin.css` — the design system above.
-- `assets/admin/admin.js` — React (`wp.element`) rendering the shell and screens.
+- `assets/admin/admin.js` — React (`wp.element`) rendering the shell and the
+  catalogue/order/customer screens.
+- `assets/admin/screens.js` — the Shipping, Parcels and Messages screens, exposed
+  as `window.storekeeperScreens`; loaded first, rendered by `admin.js`.
 - `src/Admin/Menu.php` — body class, asset loading and the mount point.
+
+## Printing
+
+The Parcels screen prints a packing slip or a dispatch sheet. The job is rendered
+through `wp.element.createPortal` into a `.sk-print` block on `document.body`,
+the app shell is hidden by the print stylesheet, and `window.print()` opens the
+OS dialog. There is no PDF renderer, no printer driver and no courier call; the
+sheet is paper the staff hand to a rider.

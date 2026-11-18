@@ -359,6 +359,7 @@ final class ShipmentService
 
         $shipment['items'] = $this->shipments->items($shipmentId);
         $shipment['events'] = $this->shipments->events($shipmentId);
+        $shipment['order'] = $this->orderSummary((int) $shipment['order_id']);
 
         return $shipment;
     }
@@ -375,6 +376,97 @@ final class ShipmentService
     public function forOrder(int $orderId): array
     {
         return $this->shipments->forOrderDetailed($orderId);
+    }
+
+    /**
+     * Parcels across orders for the staff screens (§14.2). Defaults to the
+     * "to pack" list: everything still `pending`, oldest first is not useful
+     * here, so the repository returns newest first.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function listing(?string $status = null, int $limit = 100): array
+    {
+        if ($status !== null && $status !== '' && !in_array($status, ShipmentStatus::all(), true)) {
+            throw new ValidationFailed(
+                'Unknown parcel status.',
+                ['status' => implode(', ', ShipmentStatus::all())]
+            );
+        }
+
+        $rows = $this->shipments->listWithOrder($status, min(200, max(1, $limit)));
+        $out = [];
+
+        foreach ($rows as $row) {
+            $address = json_decode((string) ($row['order_shipping_address'] ?? ''), true);
+            $address = is_array($address) ? $address : [];
+
+            $out[] = [
+                'id' => (int) $row['id'],
+                'uuid' => (string) $row['uuid'],
+                'status' => (string) $row['status'],
+                'status_label' => ShipmentStatus::label((string) $row['status']),
+                'method_name' => $row['method_name'] === null ? null : (string) $row['method_name'],
+                'carrier' => $row['carrier'] === null ? null : (string) $row['carrier'],
+                'waybill_number' => $row['waybill_number'] === null ? null : (string) $row['waybill_number'],
+                'rider_name' => $row['rider_name'] === null ? null : (string) $row['rider_name'],
+                'rider_phone' => $row['rider_phone'] === null ? null : (string) $row['rider_phone'],
+                'pieces' => (int) $row['pieces'],
+                'created_at' => (string) $row['created_at'],
+                'packed_at' => $row['packed_at'] === null ? null : (string) $row['packed_at'],
+                'dispatched_at' => $row['dispatched_at'] === null ? null : (string) $row['dispatched_at'],
+                'delivered_at' => $row['delivered_at'] === null ? null : (string) $row['delivered_at'],
+                'order' => [
+                    'uuid' => (string) $row['order_uuid'],
+                    'number' => (string) $row['order_number'],
+                    'payment_status' => (string) $row['order_payment_status'],
+                    'fulfilment_status' => (string) $row['order_fulfilment_status'],
+                    'recipient_name' => isset($address['recipient_name']) ? (string) $address['recipient_name'] : null,
+                    'phone' => isset($address['phone_e164']) ? (string) $address['phone_e164'] : null,
+                    'email' => isset($address['email']) ? (string) $address['email'] : null,
+                    'delivery_method' => isset($address['method']) ? (string) $address['method'] : null,
+                    'line1' => isset($address['line1']) ? (string) $address['line1'] : null,
+                    'line2' => isset($address['line2']) ? (string) $address['line2'] : null,
+                    'landmark' => isset($address['landmark']) ? (string) $address['landmark'] : null,
+                    'city' => isset($address['city']) ? (string) $address['city'] : null,
+                    'lga' => isset($address['lga']) ? (string) $address['lga'] : null,
+                    'state' => isset($address['state']) ? (string) $address['state'] : null,
+                    'shipping_label' => isset($address['shipping_label']) ? (string) $address['shipping_label'] : null,
+                ],
+            ];
+        }
+
+        return $out;
+    }
+
+    /** The "to pack" list: parcels nobody has packed yet. @return list<array<string,mixed>> */
+    public function toPack(int $limit = 100): array
+    {
+        return $this->listing(ShipmentStatus::PENDING, $limit);
+    }
+
+    /** @return array<string,mixed>|null */
+    private function orderSummary(int $orderId): ?array
+    {
+        $order = $this->orders->order($orderId);
+
+        if ($order === null) {
+            return null;
+        }
+
+        $address = json_decode((string) ($order['shipping_address'] ?? ''), true);
+
+        return [
+            'id' => (int) $order['id'],
+            'uuid' => (string) $order['uuid'],
+            'number' => (string) $order['number'],
+            'status' => (string) $order['status'],
+            'payment_status' => (string) $order['payment_status'],
+            'fulfilment_status' => (string) $order['fulfilment_status'],
+            'total_kobo' => (int) $order['total_kobo'],
+            'shipping_address' => is_array($address) ? $address : [],
+            'created_at' => (string) $order['created_at'],
+        ];
     }
 
     /**

@@ -152,6 +152,105 @@ final class NotificationsTest extends TestCase
         self::assertSame('New order SK-00011', explode(' — ', $this->store->channel->sent[1]['subject'])[0]);
     }
 
+    public function testTheTemplateScreenStartsWithTheCodeDefaults(): void
+    {
+        $rows = $this->store->messages->templates();
+
+        self::assertCount(6, $rows);
+
+        $buyer = $this->rowFor($rows, 'order_created_buyer');
+
+        self::assertSame('email', $buyer['channel']);
+        self::assertFalse($buyer['is_overridden']);
+        self::assertSame(\StoreKeeper\Commerce\Notifications\Templates::default('order_created_buyer')['subject'], $buyer['default_subject']);
+        self::assertContains('order_number', $buyer['placeholders']);
+        self::assertSame([], $this->store->db->select(
+            sprintf('SELECT * FROM %smessage_templates', $this->store->db->prefix())
+        ), 'No rows are written until a template is edited');
+    }
+
+    public function testSavingATemplateChangesWhatIsQueuedAndResetRestoresTheDefault(): void
+    {
+        $saved = $this->store->messages->saveTemplate('order_created_buyer', [
+            'subject' => 'Thanks {{customer_name}} — {{store_name}}',
+            'body' => 'Order {{order_number}} is in. Total {{order_total}}.',
+        ], $this->store->actor());
+
+        self::assertTrue($saved['is_overridden']);
+        self::assertTrue($saved['is_active']);
+        self::assertSame('Thanks {{customer_name}} — {{store_name}}', $saved['subject']);
+
+        $this->store->messages->queue('order_created_buyer', 'ada@example.com', [
+            'customer_name' => 'Ada',
+            'store_name' => 'Ladies Corner',
+            'order_number' => 'SK-9',
+            'order_total' => '₦1,000',
+        ]);
+
+        $row = $this->store->db->first(sprintf('SELECT * FROM %smessage_log LIMIT 1', $this->store->db->prefix()));
+        self::assertSame('Thanks Ada — Ladies Corner', $row['subject']);
+        self::assertSame('Order SK-9 is in. Total ₦1,000.', $row['body']);
+
+        $reset = $this->store->messages->saveTemplate('order_created_buyer', ['reset' => true], $this->store->actor());
+
+        self::assertFalse($reset['is_overridden']);
+        self::assertSame($reset['default_subject'], $reset['subject']);
+        self::assertSame([], $this->store->db->select(
+            sprintf('SELECT * FROM %smessage_templates', $this->store->db->prefix())
+        ), 'Resetting deletes the override instead of leaving a dead row');
+
+        $this->store->messages->queue('order_created_buyer', 'ada@example.com', ['order_number' => 'SK-10']);
+        $latest = $this->store->db->first(sprintf('SELECT * FROM %smessage_log ORDER BY id DESC LIMIT 1', $this->store->db->prefix()));
+        self::assertStringContainsString('Order SK-10 received', (string) $latest['subject'], 'The code default is used again');
+    }
+
+    public function testAnUnknownTemplateEventIsRefused(): void
+    {
+        $this->expectException(\StoreKeeper\Commerce\Core\Exception\ValidationFailed::class);
+
+        $this->store->messages->saveTemplate('made_up_event', [
+            'subject' => 'Hello',
+            'body' => 'Body',
+        ], $this->store->actor());
+    }
+
+    public function testTheMessageLogCanBeListedAndCounted(): void
+    {
+        $this->store->messages->queue('order_created_buyer', 'ada@example.com', ['order_number' => 'SK-1']);
+        $this->store->messages->queue('shipment_dispatched', 'ada@example.com', ['order_number' => 'SK-1']);
+        $this->store->messages->dispatch();
+        $this->store->channel->failuresRemaining = 99;
+        $this->store->messages->queue('otp_login', 'ada@example.com', ['code' => '123456', 'minutes' => 10]);
+        $this->store->messages->dispatch();
+
+        $all = $this->store->messages->recent(null);
+
+        self::assertCount(3, $all['rows']);
+        self::assertSame(1, $all['counts']['queued'], 'A failed attempt stays queued for the next run');
+        self::assertSame(2, $all['counts']['sent']);
+        self::assertSame('otp_login', $all['rows'][0]['event'], 'Newest first');
+        self::assertSame('Your sign-in code is 123456. It expires in 10 minutes.', $all['rows'][0]['body']);
+
+        $sent = $this->store->messages->recent('sent');
+        self::assertCount(2, $sent['rows']);
+        self::assertSame('sent', $sent['rows'][0]['status']);
+    }
+
+    /**
+     * @param list<array<string,mixed>> $rows
+     * @return array<string,mixed>
+     */
+    private function rowFor(array $rows, string $event): array
+    {
+        foreach ($rows as $row) {
+            if ($row['event'] === $event) {
+                return $row;
+            }
+        }
+
+        self::fail('No template row for ' . $event);
+    }
+
     public function testAnOrderWithoutABuyerEmailOnlyAlertsTheStore(): void
     {
         $order = [

@@ -63,4 +63,41 @@ final class MessageLogRepository
             sprintf("SELECT COUNT(*) FROM %smessage_log WHERE status = 'queued'", $this->db->prefix())
         );
     }
+
+    /**
+     * The log screen reads newest first, optionally narrowed to one status.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function recent(?string $status, int $limit): array
+    {
+        $sql = sprintf('SELECT * FROM %smessage_log', $this->db->prefix());
+        $params = [];
+
+        if ($status !== null && $status !== '') {
+            $sql .= ' WHERE status = ?';
+            $params[] = $status;
+        }
+
+        $sql .= ' ORDER BY id DESC LIMIT ?';
+        $params[] = max(1, $limit);
+
+        return $this->db->select($sql, $params);
+    }
+
+    /** @return array<string,int> counts keyed by status, always including queued/sent/failed */
+    public function counts(): array
+    {
+        $rows = $this->db->select(
+            sprintf('SELECT status, COUNT(*) AS total FROM %smessage_log GROUP BY status', $this->db->prefix())
+        );
+
+        $counts = ['queued' => 0, 'sent' => 0, 'failed' => 0];
+
+        foreach ($rows as $row) {
+            $counts[(string) $row['status']] = (int) $row['total'];
+        }
+
+        return $counts;
+    }
 }

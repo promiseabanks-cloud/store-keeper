@@ -141,6 +141,43 @@ final class ShipmentRepository
         $this->db->update($this->db->prefix() . 'shipments', $data, ['id' => $shipmentId]);
     }
 
+    /**
+     * Parcels across orders for the staff screens (§14.2), newest first. The
+     * join carries what a packing slip or dispatch sheet needs without a
+     * second query per row.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function listWithOrder(?string $status, int $limit): array
+    {
+        $sql = sprintf(
+            'SELECT s.*, o.uuid AS order_uuid, o.number AS order_number,
+                    o.payment_status AS order_payment_status,
+                    o.fulfilment_status AS order_fulfilment_status,
+                    o.shipping_address AS order_shipping_address,
+                    (SELECT COALESCE(SUM(si.qty_pieces), 0)
+                       FROM %sshipment_items si
+                      WHERE si.shipment_id = s.id) AS pieces
+               FROM %sshipments s
+               JOIN %sorders o ON o.id = s.order_id',
+            $this->db->prefix(),
+            $this->db->prefix(),
+            $this->db->prefix()
+        );
+
+        $params = [];
+
+        if ($status !== null && $status !== '') {
+            $sql .= ' WHERE s.status = ?';
+            $params[] = $status;
+        }
+
+        $sql .= ' ORDER BY s.id DESC LIMIT ?';
+        $params[] = max(1, $limit);
+
+        return $this->db->select($sql, $params);
+    }
+
     /** @return list<array<string,mixed>> parcels with items and timeline */
     public function forOrderDetailed(int $orderId): array
     {

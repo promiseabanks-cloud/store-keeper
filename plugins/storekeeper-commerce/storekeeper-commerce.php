@@ -115,6 +115,11 @@ add_action('plugins_loaded', static function (): void {
             $api
         ))->register();
 
+        (new \StoreKeeper\Commerce\Rest\MessagesController(
+            $container->get(\StoreKeeper\Commerce\Notifications\MessageService::class),
+            $api
+        ))->register();
+
         (new \StoreKeeper\Commerce\Rest\PosController(
             $container->get(\StoreKeeper\Commerce\Pos\DeviceService::class),
             $container->get(\StoreKeeper\Commerce\Pos\CounterService::class),
