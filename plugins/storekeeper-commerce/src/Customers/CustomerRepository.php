@@ -88,6 +88,36 @@ final class CustomerRepository
         );
     }
 
+    /** @return array<string,mixed>|null the account that signs in with this email */
+    public function customerByEmail(string $email): ?array
+    {
+        return $this->db->first(
+            sprintf('SELECT * FROM %scustomers WHERE email = ? ORDER BY id ASC LIMIT 1', $this->db->prefix()),
+            [strtolower($email)]
+        );
+    }
+
+    /** @return array<string,mixed>|null the account linked to this Google subject id */
+    public function customerByGoogleSub(string $googleSub): ?array
+    {
+        return $this->db->first(
+            sprintf('SELECT * FROM %scustomers WHERE google_sub = ?', $this->db->prefix()),
+            [$googleSub]
+        );
+    }
+
+    /** Store a new password hash (the service decides it is allowed). */
+    public function setPassword(int $customerId, string $passwordHash): void
+    {
+        $this->update($customerId, ['password_hash' => $passwordHash]);
+    }
+
+    /** Link an existing account to a Google subject id. */
+    public function setGoogleSub(int $customerId, string $googleSub): void
+    {
+        $this->update($customerId, ['google_sub' => $googleSub]);
+    }
+
     /** @param array<string,mixed> $data */
     public function create(array $data): int
     {

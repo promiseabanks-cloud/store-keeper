@@ -18,6 +18,7 @@ use StoreKeeper\Commerce\Checkout\CheckoutService;
 use StoreKeeper\Commerce\Customers\CustomerRepository;
 use StoreKeeper\Commerce\Customers\CustomerService;
 use StoreKeeper\Commerce\Customers\CustomerSessionRepository;
+use StoreKeeper\Commerce\Customers\EmailAuth;
 use StoreKeeper\Commerce\Customers\OtpRepository;
 use StoreKeeper\Commerce\Customers\StorefrontAuth;
 use StoreKeeper\Commerce\Inventory\InventoryRepository;
@@ -50,6 +51,7 @@ use StoreKeeper\Commerce\Notifications\MessageTemplateRepository;
 use StoreKeeper\Commerce\Notifications\OrderNotifications;
 use StoreKeeper\Commerce\Storefront\CatalogView;
 use StoreKeeper\Commerce\Storefront\CustomerContext;
+use StoreKeeper\Commerce\Storefront\GoogleAuth;
 use StoreKeeper\Commerce\Storefront\StorefrontAccount;
 use StoreKeeper\Commerce\Storefront\StorefrontRegistration;
 use StoreKeeper\Commerce\Storefront\CustomerSession;
@@ -263,6 +265,19 @@ final class Plugin
             $c->get(CustomerRepository::class),
             $c->get(OtpSender::class),
             $c->get(Clock::class)
+        ));
+
+        // Email + password and "Continue with Google" sign-in (§11.1). Customers
+        // are still not WordPress users; these share StorefrontAuth's session.
+        $container->singleton(EmailAuth::class, static fn (Container $c): EmailAuth => new EmailAuth(
+            $c->get(CustomerRepository::class),
+            $c->get(CustomerService::class),
+            $c->get(StorefrontAuth::class)
+        ));
+        $container->singleton(GoogleAuth::class, static fn (Container $c): GoogleAuth => new GoogleAuth(
+            $c->get(CustomerRepository::class),
+            $c->get(CustomerService::class),
+            $c->get(StorefrontAuth::class)
         ));
 
         // Storefront read model (§22.5): prices always resolve through the engine.
