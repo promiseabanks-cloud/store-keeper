@@ -1,23 +1,20 @@
 <?php
 /**
- * Sign in with a phone number and a one-time code (§22.5, §7.4).
+ * Sign in with an email and a password, or with Google (§7.4, §11.1).
  *
- * Two server-rendered steps and no JavaScript: ask for a code, then type it.
- * The pending number lives in a 10-minute HTTP-only cookie, never in the URL.
+ * Server-rendered and JavaScript-free like the rest of the shop. Customers are
+ * not WordPress users: the session cookie this page's form opens is what makes a
+ * signed-in customer's own group prices apply everywhere.
  */
 
-use StoreKeeper\Commerce\Storefront\AuthActions;
+use StoreKeeper\Commerce\Core\Plugin;
 use StoreKeeper\Commerce\Storefront\CartSession;
+use StoreKeeper\Commerce\Storefront\GoogleAuth;
 use StoreKeeper\Commerce\Storefront\Storefront;
-use StoreKeeper\Commerce\Storefront\Otp\LogOtpSender;
 
 $customer = Storefront::customer();
-$pendingPhone = $customer === null ? AuthActions::challengedPhone() : null;
-$pendingEmail = $customer === null ? AuthActions::challengedEmail() : null;
-$pendingChannel = $customer === null ? AuthActions::challengedChannel() : 'log';
 $flash = CartSession::takeFlash();
-
-$previewCode = $pendingPhone === null ? null : LogOtpSender::previewCode($pendingPhone);
+$googleEnabled = Plugin::container()->get(GoogleAuth::class)->isConfigured();
 
 get_header();
 ?>
@@ -39,12 +36,12 @@ get_header();
         <section class="skf-panel">
             <h2 class="skf-panel__title">Hello, <?php echo esc_html((string) $customer['name']); ?></h2>
             <p class="skf-field__hint">
-                You are signed in as <?php echo esc_html((string) $customer['phone_e164']); ?>.
+                You are signed in<?php echo $customer['email'] ? ' as ' . esc_html((string) $customer['email']) : ''; ?>.
                 Your prices are applied everywhere in the shop.
             </p>
 
             <p class="skf-auth__actions">
-                <a class="skf-button" href="<?php echo esc_url(Storefront::cartUrl()); ?>">Go to your cart</a>
+                <a class="skf-button" href="<?php echo esc_url(Storefront::accountUrl()); ?>">Go to your account</a>
                 <a class="skf-link" href="<?php echo esc_url(Storefront::view()->shopUrl()); ?>">Continue shopping</a>
             </p>
 
@@ -54,84 +51,35 @@ get_header();
                 <button class="skf-link" type="submit">Sign out</button>
             </form>
         </section>
-    <?php elseif ($pendingPhone !== null) : ?>
+    <?php else : ?>
         <section class="skf-panel">
-            <h2 class="skf-panel__title">Enter the code</h2>
-            <p class="skf-field__hint">
-                <?php if ($pendingChannel === 'email' && $pendingEmail !== null) : ?>
-                    We emailed a 6-digit code to <?php echo esc_html(AuthActions::maskEmail($pendingEmail)); ?>.
-                    It expires in 10 minutes. Not there? Check your spam folder.
-                <?php else : ?>
-                    We could not email a code to you. Ask the shop to check the email
-                    address on your account, then start again.
-                <?php endif; ?>
-            </p>
-
-            <?php if ($previewCode !== null) : ?>
-                <p class="skf-notice skf-notice--info" role="status">
-                    Preview only: the code is <strong><?php echo esc_html($previewCode); ?></strong>.
-                </p>
-            <?php endif; ?>
+            <h2 class="skf-panel__title">Sign in with your email</h2>
 
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <input type="hidden" name="action" value="storekeeper_otp_verify">
-                <?php wp_nonce_field('storekeeper_otp_verify'); ?>
+                <input type="hidden" name="action" value="storekeeper_email_login">
+                <?php wp_nonce_field('storekeeper_email_login'); ?>
 
                 <div class="skf-field">
-                    <label for="skf-code">6-digit code</label>
-                    <input
-                        id="skf-code"
-                        type="text"
-                        name="code"
-                        inputmode="numeric"
-                        autocomplete="one-time-code"
-                        pattern="[0-9]{6}"
-                        maxlength="6"
-                        required
-                        autofocus
-                    >
+                    <label for="skf-email">Email address</label>
+                    <input id="skf-email" type="email" name="email" autocomplete="email" placeholder="you@example.com" required autofocus>
+                </div>
+
+                <div class="skf-field">
+                    <label for="skf-password">Password</label>
+                    <input id="skf-password" type="password" name="password" autocomplete="current-password" required>
                 </div>
 
                 <button class="skf-button" type="submit">Sign in</button>
             </form>
 
-            <form class="skf-auth__resend" method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <input type="hidden" name="action" value="storekeeper_otp_request">
-                <input type="hidden" name="phone" value="<?php echo esc_attr($pendingPhone); ?>">
-                <?php wp_nonce_field('storekeeper_otp_request'); ?>
-                <button class="skf-link" type="submit">Send a new code</button>
-            </form>
-
-            <p class="skf-field__hint">Wrong number? <a href="<?php echo esc_url(home_url('/sign-in/')); ?>">Start again</a>.</p>
-        </section>
-    <?php else : ?>
-        <section class="skf-panel">
-            <h2 class="skf-panel__title">Sign in with your phone</h2>
-            <p class="skf-field__hint">
-                Wholesale customers sign in to see their own prices. We will email a
-                6-digit code to the address the shop has on file. If the shop has no
-                address for you, ask them to add one.
-            </p>
-
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <input type="hidden" name="action" value="storekeeper_otp_request">
-                <?php wp_nonce_field('storekeeper_otp_request'); ?>
-
-                <div class="skf-field">
-                    <label for="skf-phone">Phone number</label>
-                    <input
-                        id="skf-phone"
-                        type="tel"
-                        name="phone"
-                        autocomplete="tel"
-                        placeholder="0803 123 4567"
-                        required
-                        autofocus
-                    >
-                </div>
-
-                <button class="skf-button" type="submit">Send me a code</button>
-            </form>
+            <?php if ($googleEnabled) : ?>
+                <p class="skf-auth__divider"><span>or</span></p>
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                    <input type="hidden" name="action" value="storekeeper_google_start">
+                    <?php wp_nonce_field('storekeeper_google_start'); ?>
+                    <button class="skf-button skf-button--google" type="submit">Continue with Google</button>
+                </form>
+            <?php endif; ?>
 
             <p class="skf-field__hint">
                 New customer? <a href="<?php echo esc_url(Storefront::registerUrl()); ?>">Create an account</a>.

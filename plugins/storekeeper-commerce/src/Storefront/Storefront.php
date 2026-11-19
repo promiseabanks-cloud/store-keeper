@@ -41,6 +41,7 @@ final class Storefront
 
         CartActions::register();
         AuthActions::register();
+        EmailAuthActions::register();
         AccountActions::register();
 
         add_filter('template_include', static function (string $template): string {

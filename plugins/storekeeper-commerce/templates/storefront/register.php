@@ -1,30 +1,23 @@
 <?php
 /**
- * Create an account (§11.1).
+ * Create an account with an email and a password, or with Google (§11.1).
  *
- * The number is confirmed with a code before the customer row exists, so a
- * mistyped number is never saved. A manual-approval group leaves the shopper
- * pending at retail prices until staff approve them.
+ * One step, no code to wait for: the shopper chooses how they are buying, and
+ * the group's approval rule decides the rest. A manual-approval wholesale group
+ * leaves them pending at retail prices until staff approve them. The phone
+ * number is optional here and only used for delivery.
  */
 
 use StoreKeeper\Commerce\Core\Plugin;
-use StoreKeeper\Commerce\Storefront\AccountActions;
-use StoreKeeper\Commerce\Storefront\AuthActions;
 use StoreKeeper\Commerce\Storefront\CartSession;
-use StoreKeeper\Commerce\Storefront\Otp\LogOtpSender;
+use StoreKeeper\Commerce\Storefront\GoogleAuth;
 use StoreKeeper\Commerce\Storefront\Storefront;
 use StoreKeeper\Commerce\Storefront\StorefrontRegistration;
 
 $customer = Storefront::customer();
-$pending = $customer === null ? AccountActions::pendingSignup() : null;
 $flash = CartSession::takeFlash();
 $options = Plugin::container()->get(StorefrontRegistration::class)->options();
-$pendingEmail = $pending !== null && isset($pending['data']['email'])
-    ? (string) $pending['data']['email']
-    : null;
-$pendingChannel = $pending !== null && isset($pending['channel']) ? (string) $pending['channel'] : 'log';
-
-$previewCode = $pending === null ? null : LogOtpSender::previewCode((string) $pending['phone']);
+$googleEnabled = Plugin::container()->get(GoogleAuth::class)->isConfigured();
 
 get_header();
 ?>
@@ -46,55 +39,11 @@ get_header();
         <section class="skf-panel">
             <h2 class="skf-panel__title">You already have an account</h2>
             <p class="skf-field__hint">
-                You are signed in as <?php echo esc_html((string) $customer['phone_e164']); ?>.
+                You are signed in<?php echo $customer['email'] ? ' as ' . esc_html((string) $customer['email']) : ''; ?>.
             </p>
             <p class="skf-auth__actions">
                 <a class="skf-button" href="<?php echo esc_url(Storefront::accountUrl()); ?>">Go to your account</a>
                 <a class="skf-link" href="<?php echo esc_url(Storefront::view()->shopUrl()); ?>">Continue shopping</a>
-            </p>
-        </section>
-    <?php elseif ($pending !== null) : ?>
-        <section class="skf-panel">
-            <h2 class="skf-panel__title">Enter the code</h2>
-            <p class="skf-field__hint">
-                <?php if ($pendingChannel === 'email' && $pendingEmail !== null) : ?>
-                    We emailed a 6-digit code to <?php echo esc_html(AuthActions::maskEmail($pendingEmail)); ?>.
-                <?php else : ?>
-                    We could not email a code to you. Ask the shop to check its email settings.
-                <?php endif; ?>
-                Your account is created once the code is confirmed.
-            </p>
-
-            <?php if ($previewCode !== null) : ?>
-                <p class="skf-notice skf-notice--info" role="status">
-                    Preview only: the code is <strong><?php echo esc_html($previewCode); ?></strong>.
-                </p>
-            <?php endif; ?>
-
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <input type="hidden" name="action" value="storekeeper_register_verify">
-                <?php wp_nonce_field('storekeeper_register_verify'); ?>
-
-                <div class="skf-field">
-                    <label for="skf-code">6-digit code</label>
-                    <input
-                        id="skf-code"
-                        type="text"
-                        name="code"
-                        inputmode="numeric"
-                        autocomplete="one-time-code"
-                        pattern="[0-9]{6}"
-                        maxlength="6"
-                        required
-                        autofocus
-                    >
-                </div>
-
-                <button class="skf-button" type="submit">Confirm and create my account</button>
-            </form>
-
-            <p class="skf-field__hint">
-                Wrong number? <a href="<?php echo esc_url(Storefront::registerUrl()); ?>">Start again</a>.
             </p>
         </section>
     <?php else : ?>
@@ -102,8 +51,8 @@ get_header();
             <h2 class="skf-panel__title">Your details</h2>
 
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <input type="hidden" name="action" value="storekeeper_register_request">
-                <?php wp_nonce_field('storekeeper_register_request'); ?>
+                <input type="hidden" name="action" value="storekeeper_email_register">
+                <?php wp_nonce_field('storekeeper_email_register'); ?>
 
                 <div class="skf-field">
                     <label for="skf-name">Your name</label>
@@ -111,22 +60,21 @@ get_header();
                 </div>
 
                 <div class="skf-field">
-                    <label for="skf-phone">Phone number</label>
-                    <input
-                        id="skf-phone"
-                        type="tel"
-                        name="phone"
-                        autocomplete="tel"
-                        placeholder="0803 123 4567"
-                        required
-                    >
-                    <p class="skf-field__hint">Your sign-in code goes to your email; we keep this number for delivery.</p>
+                    <label for="skf-email">Email address</label>
+                    <input id="skf-email" type="email" name="email" autocomplete="email" placeholder="you@example.com" required>
+                    <p class="skf-field__hint">You sign in with this, and your order confirmations go here.</p>
+                </div>
+
+                <div class="skf-field">
+                    <label for="skf-password">Password</label>
+                    <input id="skf-password" type="password" name="password" autocomplete="new-password" minlength="8" required>
+                    <p class="skf-field__hint">At least 8 characters.</p>
                 </div>
 
                 <fieldset class="skf-field skf-field--choice">
                     <legend>How are you buying?</legend>
 
-                    <?php foreach ($options as $index => $option) : ?>
+                    <?php foreach ($options as $option) : ?>
                         <label class="skf-choice">
                             <input
                                 type="radio"
@@ -160,13 +108,23 @@ get_header();
                 </div>
 
                 <div class="skf-field">
-                    <label for="skf-email">Email address</label>
-                    <input id="skf-email" type="email" name="email" autocomplete="email" placeholder="you@example.com" required>
-                    <p class="skf-field__hint">We email your 6-digit code here, and your order confirmations.</p>
+                    <label for="skf-phone">Phone number (optional)</label>
+                    <input id="skf-phone" type="tel" name="phone" autocomplete="tel" placeholder="0803 123 4567">
+                    <p class="skf-field__hint">We keep this for delivery. You can add it at checkout instead.</p>
                 </div>
 
-                <button class="skf-button" type="submit" <?php disabled($options === []); ?>>Send me a code</button>
+                <button class="skf-button" type="submit" <?php disabled($options === []); ?>>Create my account</button>
             </form>
+
+            <?php if ($googleEnabled) : ?>
+                <p class="skf-auth__divider"><span>or</span></p>
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                    <input type="hidden" name="action" value="storekeeper_google_start">
+                    <?php wp_nonce_field('storekeeper_google_start'); ?>
+                    <button class="skf-button skf-button--google" type="submit">Continue with Google</button>
+                </form>
+                <p class="skf-field__hint">Google accounts shop at retail prices. To buy wholesale, use the form above.</p>
+            <?php endif; ?>
 
             <p class="skf-field__hint">
                 Already registered? <a href="<?php echo esc_url(home_url('/sign-in/')); ?>">Sign in</a>.

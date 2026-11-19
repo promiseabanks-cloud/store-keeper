@@ -20,6 +20,7 @@ use StoreKeeper\Commerce\Checkout\CheckoutService;
 use StoreKeeper\Commerce\Customers\CustomerRepository;
 use StoreKeeper\Commerce\Customers\CustomerService;
 use StoreKeeper\Commerce\Customers\CustomerSessionRepository;
+use StoreKeeper\Commerce\Customers\EmailAuth;
 use StoreKeeper\Commerce\Customers\OtpRepository;
 use StoreKeeper\Commerce\Customers\StorefrontAuth;
 use StoreKeeper\Commerce\Inventory\InventoryRepository;
@@ -85,6 +86,8 @@ final class TestStore
     public InMemoryOtpSender $otpSender;
 
     public StorefrontAuth $auth;
+
+    public EmailAuth $emailAuth;
 
     public OrderRepository $orderRepository;
 
@@ -193,6 +196,11 @@ final class TestStore
             $this->customerRepository,
             $this->otpSender,
             $this->clock
+        );
+        $this->emailAuth = new EmailAuth(
+            $this->customerRepository,
+            $this->customers,
+            $this->auth
         );
 
         $this->orderRepository = new OrderRepository($db, $this->clock);

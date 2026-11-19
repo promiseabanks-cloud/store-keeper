@@ -52,9 +52,20 @@ final class CustomerService
             throw new ValidationFailed('Unknown customer source.', ['source' => 'storefront, staff, pos or import.']);
         }
 
-        $phone = Phone::normalise((string) ($input['phone'] ?? ''));
-        if ($this->customers->customerByPhone($phone) !== null) {
-            throw new ValidationFailed('A customer with that phone number already exists.', ['phone' => 'Already registered.']);
+        // Email + password (or Google) is how storefront shoppers sign in now, so
+        // a self-registered customer need not give a phone number until checkout.
+        // Staff, POS and import still identify a customer by phone (§11.2).
+        $phoneInput = trim((string) ($input['phone'] ?? ''));
+        $phone = null;
+
+        if ($phoneInput !== '') {
+            $phone = Phone::normalise($phoneInput);
+            if ($this->customers->customerByPhone($phone) !== null) {
+                throw new ValidationFailed('A customer with that phone number already exists.', ['phone' => 'Already registered.']);
+            }
+        } elseif ($source !== 'storefront') {
+            // Keeps the old guarantee: a staff/POS/import customer has a phone.
+            $phone = Phone::normalise($phoneInput);
         }
 
         $requestedGroup = isset($input['group_id']) ? $this->customers->group((int) $input['group_id']) : null;
@@ -86,7 +97,9 @@ final class CustomerService
             'phone_e164' => $phone,
             'name' => $name,
             'business_name' => $input['business_name'] ?? null,
-            'email' => $input['email'] ?? null,
+            'email' => isset($input['email']) && $input['email'] !== '' ? strtolower(trim((string) $input['email'])) : null,
+            'password_hash' => isset($input['password_hash']) && $input['password_hash'] !== '' ? (string) $input['password_hash'] : null,
+            'google_sub' => isset($input['google_sub']) && $input['google_sub'] !== '' ? (string) $input['google_sub'] : null,
             'group_id' => $groupId,
             'requested_group_id' => $requestedGroupId,
             'approval_status' => $approvalStatus,
